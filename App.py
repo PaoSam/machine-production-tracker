@@ -131,15 +131,12 @@ def calcola_planning():
 
     return pd.DataFrame(log)
 
-# ---------------- RENDER TUTTI I GIORNI VISIBILI + ZOOM ----------------
+# ---------------- RENDER ZOOM + TUTTI GIORNI ----------------
 if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
     
     # Traduci tutti i giorni
     df['Giorno_IT'] = df['Giorno'].apply(italiano_giorno)
-    
-    # Crea lista ordinata di TUTTI i giorni unici
-    giorni_unici = sorted(df['Giorno_IT'].unique(), key=lambda x: pd.to_datetime(x.split(' ')[1] + '/2026', format='%d/%m/%Y'))
     
     # Calcola orario fine
     ultimo_blocco = df.iloc[-1]
@@ -158,25 +155,18 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
             "PIAZZAMENTO": "#FFA500", 
             "PRODUZIONE": "#00CC96", 
             "PAUSA": "#FF0000"
-        },
-        category_orders={"Giorno_IT": giorni_unici}
+        }
     )
 
     fig.update_traces(texttemplate=None, textposition=None)
     fig.update_layout(
         yaxis=dict(title="Orario reale", autorange="reversed", dtick=1),
-        xaxis=dict(
-            tickmode="array",
-            tickvals=giorni_unici,
-            ticktext=giorni_unici,
-            tickangle=45
-        ),
+        xaxis=dict(tickangle=45),
         height=700,
         barmode="overlay",
         title="Cronoprogramma Produzione Macchine CNC",
         legend_title="Legenda:",
-        showlegend=True,
-        margin=dict(t=80, b=120)  # Più spazio per etichette
+        showlegend=True
     )
 
     st.plotly_chart(fig, use_container_width=True)
