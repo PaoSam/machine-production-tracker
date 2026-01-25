@@ -122,7 +122,15 @@ def calcola_planning():
 
     return pd.DataFrame(log)
 
-# ---------------- RENDER CON ORARIO FINE ----------------
+# ---------------- FUNZIONE GIORNI ITALIANI ----------------
+def italiano_giorno(giorno):
+    trad = {
+        "Mon": "Lun", "Tue": "Mar", "Wed": "Mer", "Thu": "Gio", "Fri": "Ven",
+        "Sat": "Sab", "Sun": "Dom"
+    }
+    return trad[giorno[:3]]
+
+# ---------------- RENDER GRAFICO FIXED ----------------
 if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
     
@@ -131,31 +139,43 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     orario_fine = ultimo_blocco['Inizio'] + ultimo_blocco['Durata']
     giorno_fine = ultimo_blocco['Giorno']
     ora_fine = f"{int(orario_fine):02d}:{int((orario_fine%1)*60):02d}"
+    
+    # Traduci giorno fine in italiano
+    giorno_fine_it = italiano_giorno(giorno_fine)
+
+    # Traduci tutti i giorni nel df
+    df['Giorno_IT'] = df['Giorno'].apply(italiano_giorno)
 
     fig = px.bar(
-        df, x="Giorno", y="Durata", base="Inizio", color="Tipo", text=None,
+        df, x="Giorno_IT", y="Durata", base="Inizio", color="Tipo", text=None,
         color_discrete_map={
-            "PIAZZAMENTO": "#FFA500",  # Arancione
-            "PRODUZIONE": "#00CC96",  # Verde
-            "PAUSA": "#FF0000"        # Rosso
+            "PIAZZAMENTO": "#FFA500", "PRODUZIONE": "#00CC96", "PAUSA": "#FF0000"
         }
     )
 
     fig.update_traces(texttemplate=None, textposition=None)
     fig.update_layout(
         yaxis=dict(title="Orario reale", autorange="reversed", dtick=1),
-        height=800, barmode="overlay",
+        height=600,  # Ridotto per mobile
+        barmode="overlay",
         title="Cronoprogramma Produzione Macchine CNC",
         legend_title="Legenda:",
-        showlegend=True
+        showlegend=True,
+        # NO ZOOM/SCROLL SU MOBILE
+        xaxis=dict(fixedrange=True),
+        yaxis=dict(fixedrange=True),
+        dragmode=False
     )
 
     st.plotly_chart(fig, use_container_width=True)
     
-    sabato_count = len(df[df["Giorno"].str.contains("Sab")])
-    pausa_count = len(df[df['Tipo']=='PAUSA'])
-    st.info(f"**Totale:** {len(df[df['Tipo']=='PIAZZAMENTO'])} piazzamento, "
-            f"{len(df[df['Tipo']=='PRODUZIONE'])} produzione, "
-            f"{pausa_count} min pause, "
-            f"**Fine:** {giorno_fine} {ora_fine} "
+    # TOTALI CHIARI IN ORE
+    tot_piaz_ore = (piazzamento_ore * 60) / 60  # già in ore
+    tot_prod_ore = (n_pezzi * tempo_pezzo) / 60
+    pausa_ore = len(df[df['Tipo']=='PAUSA']) / 60
+    sabato_count = len(df[df["Giorno_IT"].str.contains("Sab")])
+    
+    st.info(f"**⏱️ Tempo:** Piazzamento {tot_piaz_ore:.1f}h | Produzione {tot_prod_ore:.1f}h | Pause {pausa_ore:.1f}h | "
+            f"**🏁 Fine:** {giorno_fine_it} {ora_fine} "
             f"({'⭐' if sabato_count > 0 else ''}{sabato_count} sabati 6h)")
+s
