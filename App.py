@@ -85,13 +85,12 @@ def calcola_planning():
             # AGGIUNGI PAUSE COME BLOCCHI ROSSI
             for p1, p2 in pause:
                 if p1 <= t.time() < p2:
-                    # Blocco PAUSA ROSSA
                     log.append({
                         "Giorno": t.strftime("%a %d/%m"),
                         "Inizio": t.hour + t.minute / 60,
-                        "Durata": 1 / 60,  # 1 minuto alla volta
+                        "Durata": 1 / 60,
                         "Tipo": "PAUSA",
-                        "Label": f"{t.strftime('%H:%M')}"
+                        "Label": ""
                     })
                     t += timedelta(minutes=1)
                     break
@@ -104,7 +103,7 @@ def calcola_planning():
                     "Inizio": t.hour + t.minute / 60,
                     "Durata": durata / 60,
                     "Tipo": tipo,
-                    "Label": f"{t.strftime('%H:%M')}"
+                    "Label": ""
                 })
 
                 if tipo == "PIAZZAMENTO":
@@ -119,12 +118,12 @@ def calcola_planning():
 
     return pd.DataFrame(log)
 
-# ---------------- RENDER CON PAUSE VISIBILI ----------------
+# ---------------- RENDER SENZA ORARI NEL GRAFICO ----------------
 if st.button("🔄 CALCOLA PLANNING"):
     df = calcola_planning()
 
     fig = px.bar(
-        df, x="Giorno", y="Durata", base="Inizio", color="Tipo", text="Label",
+        df, x="Giorno", y="Durata", base="Inizio", color="Tipo", text=None,
         color_discrete_map={
             "PIAZZAMENTO": "#FFA500",  # Arancione
             "PRODUZIONE": "#00CC96",  # Verde
@@ -132,11 +131,13 @@ if st.button("🔄 CALCOLA PLANNING"):
         }
     )
 
+    fig.update_traces(texttemplate=None, textposition=None)  # Togli testo dalle barre
     fig.update_layout(
         yaxis=dict(title="Orario reale", autorange="reversed", dtick=1),
         height=800, barmode="overlay",
         title="Cronoprogramma Produzione Macchine CNC",
-        legend_title="Legenda:"
+        legend_title="Legenda:",
+        showlegend=True
     )
 
     st.plotly_chart(fig, use_container_width=True)
