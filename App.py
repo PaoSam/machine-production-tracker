@@ -130,7 +130,7 @@ def italiano_giorno(giorno):
     }
     return trad[giorno[:3]]
 
-# ---------------- RENDER GRAFICO FIXED ----------------
+# ---------------- RENDER GRAFICO TUTTI I GIORNI VISIBILI ----------------
 if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
     
@@ -145,19 +145,28 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
 
     # Traduci tutti i giorni nel df
     df['Giorno_IT'] = df['Giorno'].apply(italiano_giorno)
+    
+    # Conta unici per category_orders
+    giorni_unici = sorted(df['Giorno_IT'].unique())
 
     fig = px.bar(
         df, x="Giorno_IT", y="Durata", base="Inizio", color="Tipo", text=None,
         color_discrete_map={
             "PIAZZAMENTO": "#FFA500", "PRODUZIONE": "#00CC96", "PAUSA": "#FF0000"
-        }
+        },
+        category_orders={"Giorno_IT": giorni_unici}
     )
 
     fig.update_traces(texttemplate=None, textposition=None)
     fig.update_layout(
         yaxis=dict(title="Orario reale", autorange="reversed", dtick=1, fixedrange=True),
-        xaxis=dict(fixedrange=True),
-        height=600,
+        xaxis=dict(
+            fixedrange=True,
+            tickmode='linear',
+            dtick=1,
+            tickangle=45
+        ),
+        height=700,  # Aumentato per più giorni
         barmode="overlay",
         title="Cronoprogramma Produzione Macchine CNC",
         legend_title="Legenda:",
