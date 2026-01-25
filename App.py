@@ -31,47 +31,25 @@ c4, c5 = st.columns(2)
 n_pezzi = c4.number_input("Numero di Pezzi", value=500)
 tempo_pezzo = c5.number_input("Tempo per Pezzo (minuti)", value=15.0)
 
-# ---------------- VALIDAZIONE ORARI ESTESA ----------------
+# ---------------- VALIDAZIONE ORARI SEMPRE RISPETTO AL TUO TURNO ----------------
 def valida_orario():
-    # Validazione per Solo Mio Turno
-    if tipo_lavoro == "Solo Mio Turno (Spezzato)":
-        if "Mattina" in turno_attuale and ora_inizio > time(13, 50):
+    # SEMPRE rispetto al TUO TURNO PERSONALE (indipendentemente da tipo_lavoro)
+    if "Mattina" in turno_attuale:
+        if ora_inizio > time(13, 50):
             @st.dialog("❌ ERRORE ORARIO", width="medium")
             def dialog_errore():
-                st.error("⚠️ **Turno Mattina**: non puoi iniziare dopo le 13:50!")
-                st.info("👉 Scegli ora tra 6:00-13:50 o cambia in 'Pomeriggio'")
+                st.error("⚠️ **TUO TURNO MATTINA (6:00-13:50)**: non puoi iniziare alle 17:15!")
+                st.info("👉 Il tuo turno finisce alle 13:50. Scegli ora 6:00-13:50")
                 if st.button("✕ CHIUDI", type="secondary"):
                     st.rerun()
             dialog_errore()
             st.stop()
-            
-        elif "Pomeriggio" in turno_attuale and ora_inizio < time(13, 50):
+    else:  # Pomeriggio
+        if ora_inizio < time(13, 50):
             @st.dialog("❌ ERRORE ORARIO", width="medium")
             def dialog_errore():
-                st.error("⚠️ **Turno Pomeriggio**: non puoi iniziare prima delle 13:50!")
-                st.info("👉 Scegli ora tra 13:50-21:40 o cambia in 'Mattina'")
-                if st.button("✕ CHIUDI", type="secondary"):
-                    st.rerun()
-            dialog_errore()
-            st.stop()
-    
-    # Validazione per Due Turni (Continuo) - ora inizio DEVE essere tra 6:00-21:40
-    elif tipo_lavoro == "Due Turni (Continuo)":
-        if ora_inizio < time(6, 0):
-            @st.dialog("❌ ERRORE ORARIO", width="medium")
-            def dialog_errore():
-                st.error("⚠️ **Due Turni**: non puoi iniziare prima delle 6:00!")
-                st.info("👉 Scegli ora tra 6:00-21:40")
-                if st.button("✕ CHIUDI", type="secondary"):
-                    st.rerun()
-            dialog_errore()
-            st.stop()
-        
-        elif ora_inizio > time(21, 40):
-            @st.dialog("❌ ERRORE ORARIO", width="medium")
-            def dialog_errore():
-                st.error("⚠️ **Due Turni**: non puoi iniziare dopo le 21:40!")
-                st.info("👉 Scegli ora tra 6:00-21:40")
+                st.error("⚠️ **TUO TURNO POMERIGGIO (13:50-21:40)**: non puoi iniziare prima delle 13:50!")
+                st.info("👉 Il tuo turno inizia alle 13:50. Scegli ora 13:50-21:40")
                 if st.button("✕ CHIUDI", type="secondary"):
                     st.rerun()
             dialog_errore()
@@ -105,7 +83,7 @@ def calcola_planning():
                 inizio_turno_giorno = time(6, 0)
                 fine_turno_giorno = time(21, 40)
                 pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
-            else:
+            else:  # Solo Mio Turno
                 if "Mattina" in turno_attuale:
                     inizio_turno_giorno = time(6, 0)
                     fine_turno_giorno = time(13, 50)
