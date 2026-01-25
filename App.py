@@ -130,7 +130,7 @@ def calcola_planning():
 
     return pd.DataFrame(log)
 
-# ---------------- RENDER CON ORARIO FINE ----------------
+# ---------------- RENDER CON ORARIO FINE NEL GRAFICO ----------------
 if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
     
@@ -152,6 +152,17 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
         }
     )
 
+    # ✅ AGGIUNGI LINEA ORARIO FINE NEL GRAFICO
+    fig.add_hline(
+        y=orario_fine, 
+        line_dash="dash", 
+        line_color="blue",
+        annotation_text=f"🏁 FINE {ora_fine}",
+        annotation_position="top right",
+        annotation_font_size=14,
+        annotation_font_color="blue"
+    )
+
     fig.update_traces(texttemplate=None, textposition=None)
     fig.update_layout(
         yaxis=dict(title="Orario reale", autorange="reversed", dtick=1),
@@ -163,7 +174,7 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
 
     st.plotly_chart(fig, use_container_width=True)
     
-    # ✅ TOTALI PULITI - SENZA SABATI
+    # TOTALI PULITI
     tot_piazzamento_ore = piazzamento_ore
     tot_produzione_ore = round((n_pezzi * tempo_pezzo) / 60, 1)
     pausa_min = len(df[df['Tipo']=='PAUSA'])
