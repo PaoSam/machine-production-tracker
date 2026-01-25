@@ -47,14 +47,6 @@ if "Pomeriggio" in turno_attuale and ora_inizio < time(13, 50):
     st.info("👉 Scegli ora tra 13:50-21:40")
     st.stop()
 
-# ---------------- FUNZIONE GIORNI ITALIANI ----------------
-def italiano_giorno(giorno):
-    trad = {
-        "Mon": "Lun", "Tue": "Mar", "Wed": "Mer", "Thu": "Gio", "Fri": "Ven",
-        "Sat": "Sab", "Sun": "Dom"
-    }
-    return trad[giorno[:3]]
-
 # ---------------- LOGICA CON PAUSE VISIBILI ----------------
 def calcola_planning():
     minuti_piaz = piazzamento_ore * 60
@@ -130,32 +122,51 @@ def calcola_planning():
 
     return pd.DataFrame(log)
 
-# ---------------- RENDER ----------------
+# ---------------- FUNZIONE GIORNI ITALIANI ----------------
+def italiano_giorno(giorno):
+    trad = {
+        "Mon": "Lun", "Tue": "Mar", "Wed": "Mer", "Thu": "Gio", "Fri": "Ven",
+        "Sat": "Sab", "Sun": "Dom"
+    }
+    return trad[giorno[:3]]
+
+# ---------------- RENDER GRAFICO TUTTI I GIORNI VISIBILI ----------------
 if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
-    
-    # Traduci giorni in italiano
-    df['Giorno_IT'] = df['Giorno'].apply(italiano_giorno)
     
     # Calcola orario fine
     ultimo_blocco = df.iloc[-1]
     orario_fine = ultimo_blocco['Inizio'] + ultimo_blocco['Durata']
-    giorno_fine_it = italiano_giorno(ultimo_blocco['Giorno'])
+    giorno_fine = ultimo_blocco['Giorno']
     ora_fine = f"{int(orario_fine):02d}:{int((orario_fine%1)*60):02d}"
+    
+    # Traduci giorno fine in italiano
+    giorno_fine_it = italiano_giorno(giorno_fine)
+
+    # Traduci tutti i giorni nel df
+    df['Giorno_IT'] = df['Giorno'].apply(italiano_giorno)
+    
+    # Conta unici per category_orders
+    giorni_unici = sorted(df['Giorno_IT'].unique())
 
     fig = px.bar(
         df, x="Giorno_IT", y="Durata", base="Inizio", color="Tipo", text=None,
         color_discrete_map={
             "PIAZZAMENTO": "#FFA500", "PRODUZIONE": "#00CC96", "PAUSA": "#FF0000"
         },
-        category_orders={"Giorno_IT": sorted(df['Giorno_IT'].unique())}
+        category_orders={"Giorno_IT": giorni_unici}
     )
 
     fig.update_traces(texttemplate=None, textposition=None)
     fig.update_layout(
         yaxis=dict(title="Orario reale", autorange="reversed", dtick=1, fixedrange=True),
-        xaxis=dict(fixedrange=True, tickangle=45),
-        height=700,
+        xaxis=dict(
+            fixedrange=True,
+            tickmode='linear',
+            dtick=1,
+            tickangle=45
+        ),
+        height=700,  # Aumentato per più giorni
         barmode="overlay",
         title="Cronoprogramma Produzione Macchine CNC",
         legend_title="Legenda:",
@@ -165,14 +176,12 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
 
     st.plotly_chart(fig, use_container_width=True)
     
-    # TOTALI CORRETTI E CHIARI
+    # TOTALI CHIARI IN ORE
     tot_piaz_ore = piazzamento_ore
-    tot_prod_ore = round((n_pezzi * tempo_pezzo) / 60, 1)
-    pausa_min = len(df[df['Tipo']=='PAUSA'])
+    tot_prod_ore = (n_pezzi * tempo_pezzo) / 60
+    pausa_ore = len(df[df['Tipo']=='PAUSA']) / 60
     sabato_count = len(df[df["Giorno_IT"].str.contains("Sab")])
     
-    st.info(f"**⏱️ Tempo totale:** Piazzamento {tot_piaz_ore:.1f}h | "
-            f"**{n_pezzi} pezzi** ({tot_prod_ore}h) | "
-            f"Pause {pausa_min}min | "
+    st.info(f"**⏱️ Tempo:** Piazzamento {tot_piaz_ore:.1f}h | Produzione {tot_prod_ore:.1f}h | Pause {pausa_ore:.1f}h | "
             f"**🏁 Fine:** {giorno_fine_it} {ora_fine} "
-            f"({'⭐' if sabato_count > 0 else ''}{sabato_count} sabati)")
+            f"({'⭐' if sabato_count > 0 else ''}{sabato_count} sabati 6h)")
