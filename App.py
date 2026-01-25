@@ -3,9 +3,9 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta, time
 
-st.set_page_config(page_title="Pianificatore Produzione Pro", layout="wide")
+st.set_page_config(page_title="Pianificatore Produzione Real-Time", layout="wide")
 
-st.title("⚙️ Machine Utensili: Calcolo Fine e Dettaglio Pause")
+st.title("⚙️ Timeline Produzione con Orari Esatti")
 
 # --- SIDEBAR CONFIGURAZIONE ---
 st.sidebar.header("Impostazioni Turni")
@@ -26,105 +26,92 @@ col4, col5 = st.columns(2)
 n_pezzi = col4.number_input("Numero di Pezzi", value=60)
 tempo_pezzo = col5.number_input("Tempo per Pezzo (minuti)", value=15.0, step=0.1)
 
-# --- LOGICA DI CALCOLO ---
-def calcola_produzione_completa(inizio_dt, ore_piazzamento, ore_pezzi, modalita, turno_sp):
+# --- LOGICA DI CALCOLO TIMELINE ---
+def calcola_timeline_precisa(inizio_dt, ore_piazzamento, ore_pezzi, modalita, turno_sp):
     corrente = inizio_dt
     min_piazzamento = ore_piazzamento * 60
     min_pezzi = ore_pezzi * 60
-    log_lavoro = []
+    dati_timeline = []
 
-    def aggiungi_log(tipo, durata_min):
-        if durata_min > 0:
-            giorno_str = corrente.strftime('%A %d/%m')
-            log_lavoro.append({"Giorno": giorno_str, "Ore": round(durata_min / 60, 2), "Tipo": tipo})
+    def aggiungi_evento(tipo, inizio, fine):
+        dati_timeline.append(dict(Task=tipo, Start=inizio, Finish=fine, Resource=tipo))
 
     while (min_piazzamento + min_pezzi) > 0:
         wd = corrente.weekday()
         if wd < 5: # Lun-Ven
-            if modalita == "Due Turni (Continuo)":
-                finestre = [(time(6, 0), time(13, 50)), (time(13, 50), time(21, 40))]
-            else:
-                finestre = [(time(6, 0), time(13, 50))] if "Mattina" in turno_sp else [(time(13, 50), time(21, 40))]
+            finestre = [(time(6, 0), time(13, 50)), (time(13, 50), time(21, 40))] if modalita == "Due Turni (Continuo)" else \
+                       ([(time(6, 0), time(13, 50))] if "Mattina" in turno_sp else [(time(13, 50), time(21, 40))])
         elif wd == 5: # Sabato
             finestre = [(time(6, 0), time(12, 0))]
         else: # Domenica
-            corrente += timedelta(days=1)
-            corrente = corrente.replace(hour=6, minute=0, second=0)
-            continue
+            corrente += timedelta(days=1); corrente = corrente.replace(hour=6, minute=0); continue
 
         lavorato_oggi = False
-        for f_inizio, f_fine in finestre:
-            limite_inizio = corrente.replace(hour=f_inizio.hour, minute=f_inizio.minute, second=0)
-            limite_fine = corrente.replace(hour=f_fine.hour, minute=f_fine.minute, second=0)
+        for f_ini, f_fin in finestre:
+            lim_ini = corrente.replace(hour=f_ini.hour, minute=f_ini.minute, second=0)
+            lim_fin = corrente.replace(hour=f_fin.hour, minute=f_fin.minute, second=0)
             
-            p_inizio, p_fine = None, None
-            if f_inizio == time(6, 0): # Mattina
-                p_inizio, p_fine = limite_inizio.replace(hour=12, minute=0), limite_inizio.replace(hour=12, minute=20)
-            elif f_inizio == time(13, 50): # Pomeriggio
-                p_inizio, p_fine = limite_inizio.replace(hour=19, minute=30), limite_inizio.replace(hour=19, minute=50)
+            p_ini, p_fin = (lim_ini.replace(hour=12, minute=0), lim_ini.replace(hour=12, minute=20)) if f_ini == time(6, 0) else \
+                           (lim_ini.replace(hour=19, minute=30), lim_ini.replace(hour=19, minute=50)) if f_ini == time(13, 50) else (None, None)
 
-            if corrente >= limite_fine: continue
-            if corrente < limite_inizio: corrente = limite_inizio
+            if corrente >= lim_fin: continue
+            if corrente < lim_ini: corrente = lim_ini
 
-            while corrente < limite_fine and (min_piazzamento + min_pezzi) > 0:
-                # GESTIONE PAUSA (Se il tempo corrente entra in pausa)
-                if p_inizio and p_inizio <= corrente < p_fine:
-                    durata_pausa = (p_fine - corrente).total_seconds() / 60
-                    aggiungi_log("PAUSA", durata_pausa)
-                    corrente = p_fine
+            while corrente < lim_fin and (min_piazzamento + min_pezzi) > 0:
+                # GESTIONE PAUSA
+                if p_ini and p_ini <= corrente < p_fin:
+                    aggiungi_evento("PAUSA", corrente, p_fin)
+                    corrente = p_fin
                     continue
                 
-                prossimo_stop = p_inizio if (p_inizio and corrente < p_inizio) else limite_fine
-                min_disponibili = (prossimo_stop - corrente).total_seconds() / 60
+                prossimo_stop = p_ini if (p_ini and corrente < p_ini) else lim_fin
+                min_disp = (prossimo_stop - corrente).total_seconds() / 60
                 
+                start_task = corrente
                 if min_piazzamento > 0:
-                    lavoro = min(min_piazzamento, min_disponibili)
-                    aggiungi_log("PIAZZAMENTO", lavoro)
+                    lavoro = min(min_piazzamento, min_disp)
                     min_piazzamento -= lavoro
+                    tipo_task = "PIAZZAMENTO"
                 else:
-                    lavoro = min(min_pezzi, min_disponibili)
-                    aggiungi_log("PRODUZIONE", lavoro)
+                    lavoro = min(min_pezzi, min_disp)
                     min_pezzi -= lavoro
+                    tipo_task = "PRODUZIONE"
                 
                 corrente += timedelta(minutes=lavoro)
+                aggiungi_evento(tipo_task, start_task, corrente)
                 lavorato_oggi = True
                 if (min_piazzamento + min_pezzi) <= 0: break
-            
-            if (min_piazzamento + min_pezzi) <= 0: break
         
-        if not lavorato_oggi or corrente >= limite_fine:
-            corrente += timedelta(days=1)
-            corrente = corrente.replace(hour=6, minute=0, second=0)
+        if not lavorato_oggi or (min_piazzamento + min_pezzi) > 0:
+            if corrente >= lim_fin:
+                corrente += timedelta(days=1)
+                corrente = corrente.replace(hour=6, minute=0)
 
-    return corrente, pd.DataFrame(log_lavoro)
+    return corrente, pd.DataFrame(dati_timeline)
 
-# --- ESECUZIONE ---
-if st.button("Calcola e Mostra Grafico"):
-    dt_inizio = datetime.combine(data_inizio, ora_inizio)
+# --- ESECUZIONE E GRAFICO ---
+if st.button("Genera Timeline Dettagliata"):
+    dt_ini = datetime.combine(data_inizio, ora_inizio)
     ore_pezzi_tot = (n_pezzi * tempo_pezzo) / 60
     
-    data_fine, df_log = calcola_produzione_completa(dt_inizio, piazzamento_ore, ore_pezzi_tot, tipo_lavoro, turno_scelto)
+    data_fine, df_ev = calcola_timeline_precisa(dt_ini, piazzamento_ore, ore_pezzi_tot, tipo_lavoro, turno_scelto)
     
     st.write("---")
-    st.header(f"🏁 Consegna: {data_fine.strftime('%A %d %B - ore %H:%M')}")
+    st.subheader(f"🏁 Fine Lavorazione stimata: {data_fine.strftime('%d/%m/%Y alle ore %H:%M')}")
 
-    if not df_log.empty:
-        # Mappa colori molto accesi per distinguere
-        colori = {
-            'PIAZZAMENTO': '#FFA500',   # Arancio
-            'PRODUZIONE': '#00CC96',    # Verde
-            'PAUSA': '#FF0000'          # ROSSO ACCESO
-        }
+    if not df_ev.empty:
+        # Colori specifici
+        colori = {'PIAZZAMENTO': '#FFA500', 'PRODUZIONE': '#00CC96', 'PAUSA': '#FF0000'}
         
-        fig = px.bar(df_log, x='Giorno', y='Ore', color='Tipo',
-                     title="Analisi Giornaliera: Lavoro vs Pause",
-                     color_discrete_map=colori,
-                     hover_data={'Ore': True, 'Tipo': True})
+        # Creazione grafico Timeline (Gantt)
+        fig = px.timeline(df_ev, x_start="Start", x_end="Finish", y="Resource", color="Resource",
+                          title="Cronoprogramma Lavoro (Timeline Oraria)",
+                          color_discrete_map=colori,
+                          category_orders={"Resource": ["PIAZZAMENTO", "PRODUZIONE", "PAUSA"]})
         
-        # Miglioramento bordi per vedere le sezioni piccole
-        fig.update_traces(marker_line_color='black', marker_line_width=1)
-        fig.update_layout(barmode='stack', yaxis_title="Ore Totali")
+        fig.update_yaxes(autorange="reversed") # Per avere piazzamento in alto
+        fig.update_layout(xaxis_title="Orario e Giorno", yaxis_title="", showlegend=True)
         
         st.plotly_chart(fig, use_container_width=True)
 
-    st.info(f"Riepilogo: {piazzamento_ore}h setup + {ore_pezzi_tot:.1f}h lavoro effettivo.")
+    st.info(f"Riepilogo: {piazzamento_ore}h setup + {ore_pezzi_tot:.1f}h produzione.")
