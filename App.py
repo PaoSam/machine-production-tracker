@@ -6,6 +6,14 @@ from datetime import datetime, timedelta, time
 st.set_page_config(page_title="Cronoprogramma Produzione", layout="wide")
 st.title("⚙️ Cronoprogramma Produzione Professionale")
 
+# ---------------- FUNZIONE GIORNI ITALIANI ----------------
+def italiano_giorno(giorno):
+    trad = {
+        "Mon": "Lun", "Tue": "Mar", "Wed": "Mer", "Thu": "Gio", 
+        "Fri": "Ven", "Sat": "Sab", "Sun": "Dom"
+    }
+    return trad[giorno[:3]] + giorno[3:]
+
 # ---------------- CONFIGURAZIONE LAVORO SOPRA ----------------
 st.header("⚙️ Configurazione Lavoro")
 
@@ -126,14 +134,17 @@ def calcola_planning():
 if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
     
+    # ✅ AGGIUNTA TRADUZIONE GIORNI IN ITALIANO
+    df['Giorno_IT'] = df['Giorno'].apply(italiano_giorno)
+    
     # Calcola orario fine
     ultimo_blocco = df.iloc[-1]
     orario_fine = ultimo_blocco['Inizio'] + ultimo_blocco['Durata']
-    giorno_fine = ultimo_blocco['Giorno']
+    giorno_fine = ultimo_blocco['Giorno_IT']  # Usa versione italiana
     ora_fine = f"{int(orario_fine):02d}:{int((orario_fine%1)*60):02d}"
 
     fig = px.bar(
-        df, x="Giorno", y="Durata", base="Inizio", color="Tipo", text=None,
+        df, x="Giorno_IT", y="Durata", base="Inizio", color="Tipo", text=None,  # ✅ Usa Giorno_IT
         color_discrete_map={
             "PIAZZAMENTO": "#FFA500",  # Arancione
             "PRODUZIONE": "#00CC96",  # Verde
@@ -152,7 +163,7 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
 
     st.plotly_chart(fig, use_container_width=True)
     
-    sabato_count = len(df[df["Giorno"].str.contains("Sab")])
+    sabato_count = len(df[df["Giorno_IT"].str.contains("Sab")])  # ✅ Usa Giorno_IT
     pausa_count = len(df[df['Tipo']=='PAUSA'])
     st.info(f"**Totale:** {len(df[df['Tipo']=='PIAZZAMENTO'])} piazzamento, "
             f"{len(df[df['Tipo']=='PRODUZIONE'])} produzione, "
