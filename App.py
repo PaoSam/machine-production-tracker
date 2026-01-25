@@ -9,6 +9,7 @@ st.title("⚙️ Cronoprogramma Produzione Professionale")
 
 # --- SIDEBAR ---
 st.sidebar.header("Configurazione Lavoro")
+
 lavora_sabato = st.sidebar.toggle("Lavora questo Sabato?", value=True)
 
 turno_attuale = st.sidebar.selectbox(
@@ -31,9 +32,24 @@ col4, col5 = st.columns(2)
 n_pezzi = col4.number_input("Numero di Pezzi", value=60)
 tempo_pezzo = col5.number_input("Tempo per Pezzo (minuti)", value=15.0, step=0.1)
 
+# --- FUNZIONE FIX ORA INIZIO ---
+def normalizza_ora_inizio(data, ora, turno):
+    if "Mattina" in turno:
+        inizio = time(6, 0)
+        fine = time(13, 50)
+    else:
+        inizio = time(13, 50)
+        fine = time(21, 40)
+
+    if not (inizio <= ora < fine):
+        return datetime.combine(data, inizio)
+
+    return datetime.combine(data, ora)
+
 # --- LOGICA DI CALCOLO ---
 def calcola_planning_fix(data_start, ora_start, piaz_h, prod_h):
-    corrente = datetime.combine(data_start, ora_start)
+    corrente = normalizza_ora_inizio(data_start, ora_start, turno_attuale)
+
     min_restanti_piaz = piaz_h * 60
     min_restanti_prod = prod_h * 60
     log = []
@@ -58,6 +74,7 @@ def calcola_planning_fix(data_start, ora_start, piaz_h, prod_h):
                 else "Mattina (6:00-13:50)"
             )
 
+        # Fasce orarie
         if wd == 5:  # Sabato
             if lavora_sabato:
                 fasce, pause = [(time(6, 0), time(12, 0))], []
@@ -133,6 +150,7 @@ def calcola_planning_fix(data_start, ora_start, piaz_h, prod_h):
                     min_restanti_prod -= min_da_fare
 
                 fine_eff = corrente + timedelta(minutes=min_da_fare)
+
                 log.append({
                     "Giorno": corrente.strftime('%a %d/%m'),
                     "Inizio": ora_inizio_dec,
@@ -187,7 +205,7 @@ if st.button("CALCOLA PLANNING"):
             xaxis=dict(title="Giorno di Lavoro"),
             yaxis=dict(
                 title="ORARIO REALE",
-                autorange="reversed",  # 🔧 FIX DEFINITIVO
+                autorange="reversed",   # FIX asse Y
                 dtick=1
             ),
             height=800,
