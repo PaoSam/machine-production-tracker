@@ -163,14 +163,12 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
 
     st.plotly_chart(fig, use_container_width=True)
     
-    # ✅ TOTALI CORRETTI E REALISTICI
-    tot_piazzamento_ore = piazzamento_ore  # 1 SINGOLO piazzamento
-    tot_produzione_ore = round((n_pezzi * tempo_pezzo) / 60, 1)  # Ore totali produzione
+    # ✅ TOTALI PULITI - SENZA SABATI
+    tot_piazzamento_ore = piazzamento_ore
+    tot_produzione_ore = round((n_pezzi * tempo_pezzo) / 60, 1)
     pausa_min = len(df[df['Tipo']=='PAUSA'])
-    sabato_count = len(df[df["Giorno_IT"].str.contains("Sab")])
     
     st.info(f"**⏱️ Piazzamento:** {tot_piazzamento_ore:.1f}h **totale** | "
             f"**⚙️ Produzione:** {n_pezzi:,} pezzi ({tot_produzione_ore}h) | "
             f"**⏸️ Pause:** {pausa_min}min | "
-            f"**🏁 Fine:** {giorno_fine} {ora_fine} "
-            f"({'⭐' if sabato_count > 0 else ''}{sabato_count} sabati)")
+            f"**🏁 Fine:** {giorno_fine} {ora_fine}")
