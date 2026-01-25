@@ -31,7 +31,35 @@ c4, c5 = st.columns(2)
 n_pezzi = c4.number_input("Numero di Pezzi", value=500)
 tempo_pezzo = c5.number_input("Tempo per Pezzo (minuti)", value=15.0)
 
-# ---------------- LOGICA CORRETTA ----------------
+# ---------------- VALIDAZIONE ORARI ----------------
+def valida_orario():
+    if tipo_lavoro == "Solo Mio Turno (Spezzato)":
+        if "Mattina" in turno_attuale and ora_inizio > time(13, 50):
+            @st.dialog("❌ ERRORE ORARIO", width="medium")
+            def dialog_errore():
+                st.error("⚠️ **Turno Mattina**: non puoi iniziare dopo le 13:50!")
+                st.info("👉 Scegli ora tra 6:00-13:50 o cambia in 'Pomeriggio'")
+                if st.button("✕ CHIUDI", type="secondary"):
+                    st.rerun()
+            
+            dialog_errore()
+            st.stop()  # Blocca l'app
+            
+        elif "Pomeriggio" in turno_attuale and ora_inizio < time(13, 50):
+            @st.dialog("❌ ERRORE ORARIO", width="medium")
+            def dialog_errore():
+                st.error("⚠️ **Turno Pomeriggio**: non puoi iniziare prima delle 13:50!")
+                st.info("👉 Scegli ora tra 13:50-21:40 o cambia in 'Mattina'")
+                if st.button("✕ CHIUDI", type="secondary"):
+                    st.rerun()
+            
+            dialog_errore()
+            st.stop()
+
+# Esegui validazione
+valida_orario()
+
+# ---------------- LOGICA ----------------
 def calcola_planning():
     minuti_piaz = piazzamento_ore * 60
     minuti_prod = n_pezzi * tempo_pezzo
@@ -41,22 +69,20 @@ def calcola_planning():
     while minuti_piaz + minuti_prod > 0:
         wd = corrente.weekday()
 
-        # Skip domenica
-        if wd == 6:
+        if wd == 6:  # Skip domenica
             corrente += timedelta(days=1)
             continue
 
-        # Skip sabato se non lavora
-        if wd == 5 and not lavora_sabato:
+        if wd == 5 and not lavora_sabato:  # Skip sabato
             corrente += timedelta(days=1)
             continue
 
-        # Orari turno basati su tipo_lavoro
+        # Orari turno
         if tipo_lavoro == "Due Turni (Continuo)":
             inizio_turno_giorno = time(6, 0)
             fine_turno_giorno = time(21, 40)
             pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
-        else:  # Solo Mio Turno
+        else:
             if "Mattina" in turno_attuale:
                 inizio_turno_giorno = time(6, 0)
                 fine_turno_giorno = time(13, 50)
@@ -66,13 +92,10 @@ def calcola_planning():
                 fine_turno_giorno = time(21, 40)
                 pause = [(time(19, 30), time(19, 50))]
 
-        # Parte da max(corrente.time(), inizio_turno_giorno)
         t_start = max(corrente.time(), inizio_turno_giorno)
         t = corrente.replace(hour=t_start.hour, minute=t_start.minute)
 
-        # Continua fino a fine_turno_giorno o fine giornata
         while t.time() < fine_turno_giorno and (minuti_piaz + minuti_prod) > 0:
-            # Skip pause
             in_pausa = False
             for p1, p2 in pause:
                 if p1 <= t.time() < p2:
@@ -100,7 +123,6 @@ def calcola_planning():
 
             t += timedelta(minutes=durata)
 
-        # Passa al giorno dopo, reset a inizio_turno_giorno
         corrente = corrente + timedelta(days=1)
         corrente = corrente.replace(hour=inizio_turno_giorno.hour, minute=inizio_turno_giorno.minute)
 
@@ -111,30 +133,16 @@ if st.button("🔄 CALCOLA PLANNING"):
     df = calcola_planning()
 
     fig = px.bar(
-        df,
-        x="Giorno",
-        y="Durata",
-        base="Inizio",
-        color="Tipo",
-        text="Label",
-        color_discrete_map={
-            "PIAZZAMENTO": "#FFA500",
-            "PRODUZIONE": "#00CC96"
-        }
+        df, x="Giorno", y="Durata", base="Inizio", color="Tipo", text="Label",
+        color_discrete_map={"PIAZZAMENTO": "#FFA500", "PRODUZIONE": "#00CC96"}
     )
 
     fig.update_layout(
-        yaxis=dict(
-            title="Orario reale",
-            autorange="reversed",
-            dtick=1
-        ),
-        height=800,
-        barmode="overlay",
+        yaxis=dict(title="Orario reale", autorange="reversed", dtick=1),
+        height=800, barmode="overlay",
         title="Cronoprogramma Produzione Macchine CNC"
     )
 
     st.plotly_chart(fig, use_container_width=True)
     
-    # Info totali
     st.info(f"**Totale:** {len(df[df['Tipo']=='PIAZZAMENTO'])} blocchi piazzamento, {len(df[df['Tipo']=='PRODUZIONE'])} blocchi produzione")
