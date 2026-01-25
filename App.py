@@ -31,29 +31,18 @@ c4, c5 = st.columns(2)
 n_pezzi = c4.number_input("Numero di Pezzi", value=500)
 tempo_pezzo = c5.number_input("Tempo per Pezzo (minuti)", value=15.0)
 
-# ---------------- VALIDAZIONE ORARI SEMPRE RISPETTO AL TUO TURNO ----------------
+# ---------------- VALIDAZIONE ORARI SEMPLIFICATA ----------------
 def valida_orario():
-    # SEMPRE rispetto al TUO TURNO PERSONALE (indipendentemente da tipo_lavoro)
-    if "Mattina" in turno_attuale:
-        if ora_inizio > time(13, 50):
-            @st.dialog("❌ ERRORE ORARIO", width="medium")
-            def dialog_errore():
-                st.error("⚠️ **TUO TURNO MATTINA (6:00-13:50)**: non puoi iniziare alle 17:15!")
-                st.info("👉 Il tuo turno finisce alle 13:50. Scegli ora 6:00-13:50")
-                if st.button("✕ CHIUDI", type="secondary"):
-                    st.rerun()
-            dialog_errore()
-            st.stop()
-    else:  # Pomeriggio
-        if ora_inizio < time(13, 50):
-            @st.dialog("❌ ERRORE ORARIO", width="medium")
-            def dialog_errore():
-                st.error("⚠️ **TUO TURNO POMERIGGIO (13:50-21:40)**: non puoi iniziare prima delle 13:50!")
-                st.info("👉 Il tuo turno inizia alle 13:50. Scegli ora 13:50-21:40")
-                if st.button("✕ CHIUDI", type="secondary"):
-                    st.rerun()
-            dialog_errore()
-            st.stop()
+    if "Mattina" in turno_attuale and ora_inizio > time(13, 50):
+        st.dialog("❌ ERRORE ORARIO", width="medium")(
+            lambda: st.error("⚠️ **TUO TURNO MATTINA**: non puoi iniziare dopo le 13:50!\n👉 Scegli ora 6:00-13:50")
+        )
+        st.stop()
+    elif "Pomeriggio" in turno_attuale and ora_inizio < time(13, 50):
+        st.dialog("❌ ERRORE ORARIO", width="medium")(
+            lambda: st.error("⚠️ **TUO TURNO POMERIGGIO**: non puoi iniziare prima delle 13:50!\n👉 Scegli ora 13:50-21:40")
+        )
+        st.stop()
 
 valida_orario()
 
