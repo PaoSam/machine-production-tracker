@@ -3,13 +3,11 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta, time
 
-st.set_page_config(page_title="Planning Officina - FIX", layout="wide")
-
+st.set_page_config(page_title="Planning Officina", layout="wide")
 st.title("⚙️ Cronoprogramma Produzione Professionale")
 
 # --- SIDEBAR ---
 st.sidebar.header("Configurazione Lavoro")
-
 lavora_sabato = st.sidebar.toggle("Lavora questo Sabato?", value=True)
 
 turno_attuale = st.sidebar.selectbox(
@@ -32,190 +30,92 @@ col4, col5 = st.columns(2)
 n_pezzi = col4.number_input("Numero di Pezzi", value=60)
 tempo_pezzo = col5.number_input("Tempo per Pezzo (minuti)", value=15.0, step=0.1)
 
-# --- FUNZIONE FIX ORA INIZIO ---
-def normalizza_ora_inizio(data, ora, turno):
-    if "Mattina" in turno:
-        inizio = time(6, 0)
-        fine = time(13, 50)
-    else:
-        inizio = time(13, 50)
-        fine = time(21, 40)
-
-    if not (inizio <= ora < fine):
-        return datetime.combine(data, inizio)
-
-    return datetime.combine(data, ora)
-
-# --- LOGICA DI CALCOLO ---
-def calcola_planning_fix(data_start, ora_start, piaz_h, prod_h):
-    corrente = normalizza_ora_inizio(data_start, ora_start, turno_attuale)
-
-    min_restanti_piaz = piaz_h * 60
-    min_restanti_prod = prod_h * 60
+# --- CALCOLO ---
+def calcola_planning(data_start, ora_start, piaz_h, prod_h):
+    corrente = datetime.combine(data_start, ora_start)
+    min_piaz = piaz_h * 60
+    min_prod = prod_h * 60
     log = []
 
-    inizio_sett_zero = data_start - timedelta(days=data_start.weekday())
+    primo_giorno = True
 
-    while (min_restanti_piaz + min_restanti_prod) > 0:
+    while min_piaz + min_prod > 0:
         wd = corrente.weekday()
-
-        if wd == 6:  # Domenica
+        if wd == 6:
             corrente += timedelta(days=1)
             corrente = corrente.replace(hour=6, minute=0)
+            primo_giorno = False
             continue
 
-        settimane_trascorse = (corrente.date() - inizio_sett_zero).days // 7
-        if settimane_trascorse % 2 == 0:
-            turno_sett = turno_attuale
-        else:
-            turno_sett = (
-                "Pomeriggio (13:50-21:40)"
-                if turno_attuale.startswith("Mattina")
-                else "Mattina (6:00-13:50)"
-            )
-
-        # Fasce orarie
-        if wd == 5:  # Sabato
-            if lavora_sabato:
-                fasce, pause = [(time(6, 0), time(12, 0))], []
+        # Fasce
+        if tipo_lavoro == "Solo Mio Turno (Spezzato)":
+            if "Mattina" in turno_attuale:
+                inizio = corrente.time() if primo_giorno else time(6, 0)
+                fine = time(13, 50)
+                pause = [(time(12, 0), time(12, 20))]
             else:
-                corrente += timedelta(days=1)
-                corrente = corrente.replace(hour=6, minute=0)
-                continue
+                inizio = corrente.time() if primo_giorno else time(13, 50)
+                fine = time(21, 40)
+                pause = [(time(19, 30), time(19, 50))]
         else:
-            if tipo_lavoro == "Due Turni (Continuo)":
-                fasce = [(time(6, 0), time(21, 40))]
-                pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
-            else:
-                if "Mattina" in turno_sett:
-                    fasce = [(time(6, 0), time(13, 50))]
-                    pause = [(time(12, 0), time(12, 20))]
-                else:
-                    fasce = [(time(13, 50), time(21, 40))]
-                    pause = [(time(19, 30), time(19, 50))]
+            inizio = corrente.time() if primo_giorno else time(6, 0)
+            fine = time(21, 40)
+            pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
 
-        lavorato_oggi = False
+        primo_giorno = False
 
-        for f_ini, f_fin in fasce:
-            lim_ini = corrente.replace(hour=f_ini.hour, minute=f_ini.minute, second=0)
-            lim_fin = corrente.replace(hour=f_fin.hour, minute=f_fin.minute, second=0)
+        t = corrente.replace(hour=inizio.hour, minute=inizio.minute)
 
-            if corrente >= lim_fin:
+        while t.time() < fine and min_piaz + min_prod > 0:
+            if any(p[0] <= t.time() < p[1] for p in pause):
+                t += timedelta(minutes=1)
                 continue
-            if corrente < lim_ini:
-                corrente = lim_ini
 
-            while corrente < lim_fin and (min_restanti_piaz + min_restanti_prod) > 0:
-                pausa_attiva = None
-                for p_s, p_e in pause:
-                    p_s_dt = corrente.replace(hour=p_s.hour, minute=p_s.minute)
-                    p_e_dt = corrente.replace(hour=p_e.hour, minute=p_e.minute)
-                    if p_s_dt <= corrente < p_e_dt:
-                        pausa_attiva = (p_s_dt, p_e_dt)
-                        break
+            tipo = "PIAZZAMENTO" if min_piaz > 0 else "PRODUZIONE"
+            durata = min(10, min_piaz if tipo == "PIAZZAMENTO" else min_prod)
 
-                ora_inizio_dec = corrente.hour + corrente.minute / 60
+            log.append({
+                "Giorno": t.strftime("%a %d/%m"),
+                "Inizio": t.hour + t.minute / 60,
+                "Durata": durata / 60,
+                "Tipo": tipo,
+                "Label": f"{t.strftime('%H:%M')}"
+            })
 
-                if pausa_attiva:
-                    durata_p = (pausa_attiva[1] - corrente).total_seconds() / 3600
-                    log.append({
-                        "Giorno": corrente.strftime('%a %d/%m'),
-                        "Inizio": ora_inizio_dec,
-                        "Durata": durata_p,
-                        "Tipo": "PAUSA",
-                        "Label": f"{corrente.strftime('%H:%M')}-{pausa_attiva[1].strftime('%H:%M')}"
-                    })
-                    corrente = pausa_attiva[1]
-                    lavorato_oggi = True
-                    continue
+            if tipo == "PIAZZAMENTO":
+                min_piaz -= durata
+            else:
+                min_prod -= durata
 
-                ostacoli = [lim_fin] + [
-                    corrente.replace(hour=p[0].hour, minute=p[0].minute)
-                    for p in pause
-                    if corrente < corrente.replace(hour=p[0].hour, minute=p[0].minute)
-                ]
+            t += timedelta(minutes=durata)
 
-                fine_massima = min(ostacoli)
-                min_disp = (fine_massima - corrente).total_seconds() / 60
+        corrente += timedelta(days=1)
+        corrente = corrente.replace(hour=6, minute=0)
 
-                tipo = "PIAZZAMENTO" if min_restanti_piaz > 0 else "PRODUZIONE"
-                min_da_fare = min(
-                    min_restanti_piaz if min_restanti_piaz > 0 else min_restanti_prod,
-                    min_disp
-                )
+    return pd.DataFrame(log)
 
-                if tipo == "PIAZZAMENTO":
-                    min_restanti_piaz -= min_da_fare
-                else:
-                    min_restanti_prod -= min_da_fare
-
-                fine_eff = corrente + timedelta(minutes=min_da_fare)
-
-                log.append({
-                    "Giorno": corrente.strftime('%a %d/%m'),
-                    "Inizio": ora_inizio_dec,
-                    "Durata": min_da_fare / 60,
-                    "Tipo": tipo,
-                    "Label": f"{corrente.strftime('%H:%M')}-{fine_eff.strftime('%H:%M')}"
-                })
-
-                corrente = fine_eff
-                lavorato_oggi = True
-
-        if not lavorato_oggi:
-            corrente += timedelta(days=1)
-            corrente = corrente.replace(hour=6, minute=0)
-
-    return corrente, pd.DataFrame(log)
-
-# --- RENDERING ---
+# --- RENDER ---
 if st.button("CALCOLA PLANNING"):
-    fine_lavoro, df = calcola_planning_fix(
+    df = calcola_planning(
         data_inizio_val,
         ora_inizio_val,
         piazzamento_ore,
         (n_pezzi * tempo_pezzo) / 60
     )
 
-    st.success(
-        f"### 🏁 Fine Lavorazione stimata: "
-        f"{fine_lavoro.strftime('%A %d %B - ore %H:%M')}"
+    fig = px.bar(
+        df,
+        x="Giorno",
+        y="Durata",
+        base="Inizio",
+        color="Tipo",
+        text="Label"
     )
 
-    if not df.empty:
-        giorni_unici = df["Giorno"].unique()
+    fig.update_layout(
+        yaxis=dict(autorange="reversed", dtick=1),
+        height=800,
+        barmode="overlay"
+    )
 
-        fig = px.bar(
-            df,
-            x="Giorno",
-            y="Durata",
-            base="Inizio",
-            color="Tipo",
-            text="Label",
-            hover_data=["Label"],
-            category_orders={"Giorno": giorni_unici},
-            color_discrete_map={
-                "PIAZZAMENTO": "#FFA500",
-                "PRODUZIONE": "#00CC96",
-                "PAUSA": "#FF0000"
-            }
-        )
-
-        fig.update_layout(
-            xaxis=dict(title="Giorno di Lavoro"),
-            yaxis=dict(
-                title="ORARIO REALE",
-                autorange="reversed",   # FIX asse Y
-                dtick=1
-            ),
-            height=800,
-            barmode="overlay"
-        )
-
-        fig.update_traces(
-            marker_line_color="black",
-            marker_line_width=1,
-            textposition="inside"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
