@@ -155,22 +155,20 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
 
     fig.update_traces(texttemplate=None, textposition=None)
     fig.update_layout(
-        yaxis=dict(title="Orario reale", autorange="reversed", dtick=1),
-        height=600,  # Ridotto per mobile
+        yaxis=dict(title="Orario reale", autorange="reversed", dtick=1, fixedrange=True),
+        xaxis=dict(fixedrange=True),
+        height=600,
         barmode="overlay",
         title="Cronoprogramma Produzione Macchine CNC",
         legend_title="Legenda:",
         showlegend=True,
-        # NO ZOOM/SCROLL SU MOBILE
-        xaxis=dict(fixedrange=True),
-        yaxis=dict(fixedrange=True),
         dragmode=False
     )
 
     st.plotly_chart(fig, use_container_width=True)
     
     # TOTALI CHIARI IN ORE
-    tot_piaz_ore = (piazzamento_ore * 60) / 60  # già in ore
+    tot_piaz_ore = piazzamento_ore
     tot_prod_ore = (n_pezzi * tempo_pezzo) / 60
     pausa_ore = len(df[df['Tipo']=='PAUSA']) / 60
     sabato_count = len(df[df["Giorno_IT"].str.contains("Sab")])
