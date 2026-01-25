@@ -31,7 +31,7 @@ c4, c5 = st.columns(2)
 n_pezzi = c4.number_input("Numero di Pezzi", value=500)
 tempo_pezzo = c5.number_input("Tempo per Pezzo (minuti)", value=15.0)
 
-# ---------------- VALIDAZIONE ORARI CON ST.ERROR ----------------
+# ---------------- VALIDAZIONE ORARI ----------------
 if "Mattina" in turno_attuale and ora_inizio > time(13, 50):
     st.error("❌ **ERRORE**: Turno Mattina - non puoi iniziare dopo le 13:50!")
     st.info("👉 Scegli ora tra 6:00-13:50")
@@ -42,7 +42,7 @@ if "Pomeriggio" in turno_attuale and ora_inizio < time(13, 50):
     st.info("👉 Scegli ora tra 13:50-21:40")
     st.stop()
 
-# ---------------- LOGICA CON SABATO 6-12 ----------------
+# ---------------- LOGICA CON PAUSE VISIBILI ----------------
 def calcola_planning():
     minuti_piaz = piazzamento_ore * 60
     minuti_prod = n_pezzi * tempo_pezzo
@@ -56,7 +56,7 @@ def calcola_planning():
             corrente += timedelta(days=1)
             continue
 
-        if wd == 5:  # SABATO: sempre 6:00-12:00
+        if wd == 5:  # SABATO: 6:00-12:00 NO PAUSE
             if not lavora_sabato:
                 corrente += timedelta(days=1)
                 continue
@@ -82,56 +82,68 @@ def calcola_planning():
         t = corrente.replace(hour=t_start.hour, minute=t_start.minute)
 
         while t.time() < fine_turno_giorno and (minuti_piaz + minuti_prod) > 0:
-            in_pausa = False
+            # AGGIUNGI PAUSE COME BLOCCHI ROSSI
             for p1, p2 in pause:
                 if p1 <= t.time() < p2:
+                    # Blocco PAUSA ROSSA
+                    log.append({
+                        "Giorno": t.strftime("%a %d/%m"),
+                        "Inizio": t.hour + t.minute / 60,
+                        "Durata": 1 / 60,  # 1 minuto alla volta
+                        "Tipo": "PAUSA",
+                        "Label": f"{t.strftime('%H:%M')}"
+                    })
                     t += timedelta(minutes=1)
-                    in_pausa = True
                     break
-            if in_pausa:
-                continue
+            else:  # Non in pausa
+                tipo = "PIAZZAMENTO" if minuti_piaz > 0 else "PRODUZIONE"
+                durata = min(10, minuti_piaz if tipo == "PIAZZAMENTO" else minuti_prod)
 
-            tipo = "PIAZZAMENTO" if minuti_piaz > 0 else "PRODUZIONE"
-            durata = min(10, minuti_piaz if tipo == "PIAZZAMENTO" else minuti_prod)
+                log.append({
+                    "Giorno": t.strftime("%a %d/%m"),
+                    "Inizio": t.hour + t.minute / 60,
+                    "Durata": durata / 60,
+                    "Tipo": tipo,
+                    "Label": f"{t.strftime('%H:%M')}"
+                })
 
-            log.append({
-                "Giorno": t.strftime("%a %d/%m"),
-                "Inizio": t.hour + t.minute / 60,
-                "Durata": durata / 60,
-                "Tipo": tipo,
-                "Label": f"{t.strftime('%H:%M')}"
-            })
+                if tipo == "PIAZZAMENTO":
+                    minuti_piaz -= durata
+                else:
+                    minuti_prod -= durata
 
-            if tipo == "PIAZZAMENTO":
-                minuti_piaz -= durata
-            else:
-                minuti_prod -= durata
-
-            t += timedelta(minutes=durata)
+                t += timedelta(minutes=durata)
 
         corrente = corrente + timedelta(days=1)
         corrente = corrente.replace(hour=6, minute=0)
 
     return pd.DataFrame(log)
 
-# ---------------- RENDER ----------------
+# ---------------- RENDER CON PAUSE VISIBILI ----------------
 if st.button("🔄 CALCOLA PLANNING"):
     df = calcola_planning()
 
     fig = px.bar(
         df, x="Giorno", y="Durata", base="Inizio", color="Tipo", text="Label",
-        color_discrete_map={"PIAZZAMENTO": "#FFA500", "PRODUZIONE": "#00CC96"}
+        color_discrete_map={
+            "PIAZZAMENTO": "#FFA500",  # Arancione
+            "PRODUZIONE": "#00CC96",  # Verde
+            "PAUSA": "#FF0000"        # Rosso
+        }
     )
 
     fig.update_layout(
         yaxis=dict(title="Orario reale", autorange="reversed", dtick=1),
         height=800, barmode="overlay",
-        title="Cronoprogramma Produzione Macchine CNC"
+        title="Cronoprogramma Produzione Macchine CNC",
+        legend_title="Legenda:"
     )
 
     st.plotly_chart(fig, use_container_width=True)
     
     sabato_count = len(df[df["Giorno"].str.contains("Sab")])
-    st.info(f"**Totale:** {len(df[df['Tipo']=='PIAZZAMENTO'])} blocchi piazzamento, "
-            f"{len(df[df['Tipo']=='PRODUZIONE'])} blocchi produzione "
-            f"({'⭐' if sabato_count > 0 else ''}Inclusi {sabato_count} sabati 6h)")
+    pausa_count = len(df[df['Tipo']=='PAUSA'])
+    st.info(f"**Totale:** {len(df[df['Tipo']=='PIAZZAMENTO'])} piazzamento, "
+            f"{len(df[df['Tipo']=='PRODUZIONE'])} produzione, "
+            f"{pausa_count} min pause, "
+            f"({'⭐' if sabato_count > 0 else ''}{sabato_count} sabati 6h)")
