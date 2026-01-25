@@ -3,8 +3,14 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta, time
 
-st.set_page_config(page_title="Cronoprogramma Produzione", layout="wide")
-st.title("⚙️ Cronoprogramma Produzione Professionale")
+# ✅ CRONOCNC - NUOVO NOME
+st.set_page_config(
+    page_title="CronoCNC", 
+    page_icon="⚙️",
+    layout="wide"
+)
+
+st.title("⚙️ CronoCNC - Pianificazione Produzione")
 
 # ---------------- FUNZIONE GIORNI ITALIANI ----------------
 def italiano_giorno(giorno):
@@ -14,7 +20,7 @@ def italiano_giorno(giorno):
     }
     return trad[giorno[:3]] + giorno[3:]
 
-# ---------------- CONFIGURAZIONE LAVORO SOPRA ----------------
+# ---------------- CONFIGURAZIONE LAVORO ----------------
 st.header("⚙️ Configurazione Lavoro")
 
 col1, col2 = st.columns(2)
@@ -55,7 +61,7 @@ if "Pomeriggio" in turno_attuale and ora_inizio < time(13, 50):
     st.info("👉 Scegli ora tra 13:50-21:40")
     st.stop()
 
-# ---------------- LOGICA CON PAUSE VISIBILI ----------------
+# ---------------- LOGICA CALCOLO ----------------
 def calcola_planning():
     minuti_piaz = piazzamento_ore * 60
     minuti_prod = n_pezzi * tempo_pezzo
@@ -130,14 +136,14 @@ def calcola_planning():
 
     return pd.DataFrame(log)
 
-# ---------------- RENDER CON ORARIO FINE NEL GRAFICO ----------------
+# ---------------- RENDER GRAFICO ----------------
 if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
     
-    # ✅ TRADUZIONE GIORNI ITALIANI
+    # Traduzione giorni italiani
     df['Giorno_IT'] = df['Giorno'].apply(italiano_giorno)
     
-    # Calcola orario fine
+    # Orario fine
     ultimo_blocco = df.iloc[-1]
     orario_fine = ultimo_blocco['Inizio'] + ultimo_blocco['Durata']
     giorno_fine = ultimo_blocco['Giorno_IT']
@@ -152,7 +158,7 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
         }
     )
 
-    # ✅ AGGIUNGI LINEA ORARIO FINE NEL GRAFICO
+    # Linea fine lavoro
     fig.add_hline(
         y=orario_fine, 
         line_dash="dash", 
@@ -166,7 +172,8 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     fig.update_traces(texttemplate=None, textposition=None)
     fig.update_layout(
         yaxis=dict(title="Orario reale", autorange="reversed", dtick=1),
-        height=800, barmode="overlay",
+        height=800, 
+        barmode="overlay",
         title="Cronoprogramma Produzione Macchine CNC",
         legend_title="Legenda:",
         showlegend=True
@@ -174,7 +181,7 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
 
     st.plotly_chart(fig, use_container_width=True)
     
-    # TOTALI PULITI
+    # Totali
     tot_piazzamento_ore = piazzamento_ore
     tot_produzione_ore = round((n_pezzi * tempo_pezzo) / 60, 1)
     pausa_min = len(df[df['Tipo']=='PAUSA'])
