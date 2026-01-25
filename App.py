@@ -53,8 +53,7 @@ def italiano_giorno(giorno):
         "Mon": "Lun", "Tue": "Mar", "Wed": "Mer", "Thu": "Gio", "Fri": "Ven",
         "Sat": "Sab", "Sun": "Dom"
     }
-    abbrev = giorno[:3]
-    return trad.get(abbrev, giorno)
+    return trad[giorno[:3]]
 
 # ---------------- LOGICA CON PAUSE VISIBILI ----------------
 def calcola_planning():
@@ -113,72 +112,4 @@ def calcola_planning():
 
                 log.append({
                     "Giorno": t.strftime("%a %d/%m"),
-                    "Inizio": t.hour + t.minute / 60,
-                    "Durata": durata / 60,
-                    "Tipo": tipo,
-                    "Label": ""
-                })
-
-                if tipo == "PIAZZAMENTO":
-                    minuti_piaz -= durata
-                else:
-                    minuti_prod -= durata
-
-                t += timedelta(minutes=durata)
-
-        corrente = corrente + timedelta(days=1)
-        corrente = corrente.replace(hour=6, minute=0)
-
-    return pd.DataFrame(log)
-
-# ---------------- RENDER ZOOM + TUTTI GIORNI ----------------
-if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
-    df = calcola_planning()
-    
-    # Traduci tutti i giorni
-    df['Giorno_IT'] = df['Giorno'].apply(italiano_giorno)
-    
-    # Calcola orario fine
-    ultimo_blocco = df.iloc[-1]
-    orario_fine = ultimo_blocco['Inizio'] + ultimo_blocco['Durata']
-    giorno_fine_it = italiano_giorno(ultimo_blocco['Giorno'])
-    ora_fine = f"{int(orario_fine):02d}:{int((orario_fine%1)*60):02d}"
-
-    fig = px.bar(
-        df, 
-        x="Giorno_IT", 
-        y="Durata", 
-        base="Inizio", 
-        color="Tipo", 
-        text=None,
-        color_discrete_map={
-            "PIAZZAMENTO": "#FFA500", 
-            "PRODUZIONE": "#00CC96", 
-            "PAUSA": "#FF0000"
-        }
-    )
-
-    fig.update_traces(texttemplate=None, textposition=None)
-    fig.update_layout(
-        yaxis=dict(title="Orario reale", autorange="reversed", dtick=1),
-        xaxis=dict(tickangle=45),
-        height=700,
-        barmode="overlay",
-        title="Cronoprogramma Produzione Macchine CNC",
-        legend_title="Legenda:",
-        showlegend=True
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # TOTALI CORRETTI E CHIARI
-    tot_piaz_ore = piazzamento_ore
-    tot_prod_ore = round((n_pezzi * tempo_pezzo) / 60, 1)
-    pausa_min = len(df[df['Tipo']=='PAUSA'])
-    sabato_count = len(df[df["Giorno_IT"].str.contains("Sab")])
-    
-    st.info(f"**⏱️ Tempo totale:** Piazzamento {tot_piaz_ore:.1f}h | "
-            f"**{n_pezzi} pezzi** ({tot_prod_ore}h) | "
-            f"Pause {pausa_min}min | "
-            f"**🏁 Fine:** {giorno_fine_it} {ora_fine} "
-            f"({'⭐' if sabato_count > 0 else ''}{sabato_count} sabati)")
+                    "Inizio": t.hour + t.minute
