@@ -134,17 +134,17 @@ def calcola_planning():
 if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
     
-    # ✅ AGGIUNTA TRADUZIONE GIORNI IN ITALIANO
+    # ✅ TRADUZIONE GIORNI ITALIANI
     df['Giorno_IT'] = df['Giorno'].apply(italiano_giorno)
     
     # Calcola orario fine
     ultimo_blocco = df.iloc[-1]
     orario_fine = ultimo_blocco['Inizio'] + ultimo_blocco['Durata']
-    giorno_fine = ultimo_blocco['Giorno_IT']  # Usa versione italiana
+    giorno_fine = ultimo_blocco['Giorno_IT']
     ora_fine = f"{int(orario_fine):02d}:{int((orario_fine%1)*60):02d}"
 
     fig = px.bar(
-        df, x="Giorno_IT", y="Durata", base="Inizio", color="Tipo", text=None,  # ✅ Usa Giorno_IT
+        df, x="Giorno_IT", y="Durata", base="Inizio", color="Tipo", text=None,
         color_discrete_map={
             "PIAZZAMENTO": "#FFA500",  # Arancione
             "PRODUZIONE": "#00CC96",  # Verde
@@ -163,10 +163,14 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
 
     st.plotly_chart(fig, use_container_width=True)
     
-    sabato_count = len(df[df["Giorno_IT"].str.contains("Sab")])  # ✅ Usa Giorno_IT
-    pausa_count = len(df[df['Tipo']=='PAUSA'])
-    st.info(f"**Totale:** {len(df[df['Tipo']=='PIAZZAMENTO'])} piazzamento, "
-            f"{len(df[df['Tipo']=='PRODUZIONE'])} produzione, "
-            f"{pausa_count} min pause, "
-            f"**Fine:** {giorno_fine} {ora_fine} "
-            f"({'⭐' if sabato_count > 0 else ''}{sabato_count} sabati 6h)")
+    # ✅ TOTALI CORRETTI E REALISTICI
+    tot_piazzamento_ore = piazzamento_ore  # 1 SINGOLO piazzamento
+    tot_produzione_ore = round((n_pezzi * tempo_pezzo) / 60, 1)  # Ore totali produzione
+    pausa_min = len(df[df['Tipo']=='PAUSA'])
+    sabato_count = len(df[df["Giorno_IT"].str.contains("Sab")])
+    
+    st.info(f"**⏱️ Piazzamento:** {tot_piazzamento_ore:.1f}h **totale** | "
+            f"**⚙️ Produzione:** {n_pezzi:,} pezzi ({tot_produzione_ore}h) | "
+            f"**⏸️ Pause:** {pausa_min}min | "
+            f"**🏁 Fine:** {giorno_fine} {ora_fine} "
+            f"({'⭐' if sabato_count > 0 else ''}{sabato_count} sabati)")
