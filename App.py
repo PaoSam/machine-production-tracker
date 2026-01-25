@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, time
 
 st.set_page_config(page_title="Pianificatore Produzione Pro", layout="wide")
 
-st.title("⚙️ Machine Utensili: Calcolo Fine e Carico Lavoro")
+st.title("⚙️ Machine Utensili: Calcolo Fine e Dettaglio Pause")
 
 # --- SIDEBAR CONFIGURAZIONE ---
 st.sidebar.header("Impostazioni Turni")
@@ -27,17 +27,18 @@ n_pezzi = col4.number_input("Numero di Pezzi", value=60)
 tempo_pezzo = col5.number_input("Tempo per Pezzo (minuti)", value=15.0, step=0.1)
 
 # --- LOGICA DI CALCOLO ---
-def calcola_produzione_dettagliata(inizio_dt, ore_piazzamento, ore_pezzi, modalita, turno_sp):
+def calcola_produzione_completa(inizio_dt, ore_piazzamento, ore_pezzi, modalita, turno_sp):
     corrente = inizio_dt
-    minuti_piazzamento_restanti = ore_piazzamento * 60
-    minuti_pezzi_restanti = ore_pezzi * 60
+    min_piazzamento = ore_piazzamento * 60
+    min_pezzi = ore_pezzi * 60
     log_lavoro = []
 
     def aggiungi_log(tipo, durata_min):
-        giorno_str = corrente.strftime('%A %d/%m')
-        log_lavoro.append({"Giorno": giorno_str, "Ore": durata_min / 60, "Tipo": tipo})
+        if durata_min > 0:
+            giorno_str = corrente.strftime('%A %d/%m')
+            log_lavoro.append({"Giorno": giorno_str, "Ore": round(durata_min / 60, 2), "Tipo": tipo})
 
-    while (minuti_piazzamento_restanti + minuti_pezzi_restanti) > 0:
+    while (min_piazzamento + min_pezzi) > 0:
         wd = corrente.weekday()
         if wd < 5: # Lun-Ven
             if modalita == "Due Turni (Continuo)":
@@ -56,7 +57,6 @@ def calcola_produzione_dettagliata(inizio_dt, ore_piazzamento, ore_pezzi, modali
             limite_inizio = corrente.replace(hour=f_inizio.hour, minute=f_inizio.minute, second=0)
             limite_fine = corrente.replace(hour=f_fine.hour, minute=f_fine.minute, second=0)
             
-            # Definizione Pausa specifica per la finestra
             p_inizio, p_fine = None, None
             if f_inizio == time(6, 0): # Mattina
                 p_inizio, p_fine = limite_inizio.replace(hour=12, minute=0), limite_inizio.replace(hour=12, minute=20)
@@ -66,31 +66,31 @@ def calcola_produzione_dettagliata(inizio_dt, ore_piazzamento, ore_pezzi, modali
             if corrente >= limite_fine: continue
             if corrente < limite_inizio: corrente = limite_inizio
 
-            while corrente < limite_fine and (minuti_piazzamento_restanti + minuti_pezzi_restanti) > 0:
-                # Se siamo in orario di pausa, saltiamo avanti
+            while corrente < limite_fine and (min_piazzamento + min_pezzi) > 0:
+                # GESTIONE PAUSA (Se il tempo corrente entra in pausa)
                 if p_inizio and p_inizio <= corrente < p_fine:
+                    durata_pausa = (p_fine - corrente).total_seconds() / 60
+                    aggiungi_log("PAUSA", durata_pausa)
                     corrente = p_fine
                     continue
                 
-                # Calcoliamo quanto tempo possiamo lavorare prima della pausa o della fine turno
                 prossimo_stop = p_inizio if (p_inizio and corrente < p_inizio) else limite_fine
-                minuti_disponibili = (prossimo_stop - corrente).total_seconds() / 60
+                min_disponibili = (prossimo_stop - corrente).total_seconds() / 60
                 
-                # Priorità al piazzamento, poi ai pezzi
-                if minuti_piazzamento_restanti > 0:
-                    lavoro = min(minuti_piazzamento_restanti, minuti_disponibili)
-                    aggiungi_log("Piazzamento", lavoro)
-                    minuti_piazzamento_restanti -= lavoro
+                if min_piazzamento > 0:
+                    lavoro = min(min_piazzamento, min_disponibili)
+                    aggiungi_log("PIAZZAMENTO", lavoro)
+                    min_piazzamento -= lavoro
                 else:
-                    lavoro = min(minuti_pezzi_restanti, minuti_disponibili)
-                    aggiungi_log("Produzione Pezzi", lavoro)
-                    minuti_pezzi_restanti -= lavoro
+                    lavoro = min(min_pezzi, min_disponibili)
+                    aggiungi_log("PRODUZIONE", lavoro)
+                    min_pezzi -= lavoro
                 
                 corrente += timedelta(minutes=lavoro)
                 lavorato_oggi = True
-                if minuti_piazzamento_restanti + minuti_pezzi_restanti <= 0: break
+                if (min_piazzamento + min_pezzi) <= 0: break
             
-            if minuti_piazzamento_restanti + minuti_pezzi_restanti <= 0: break
+            if (min_piazzamento + min_pezzi) <= 0: break
         
         if not lavorato_oggi or corrente >= limite_fine:
             corrente += timedelta(days=1)
@@ -99,25 +99,32 @@ def calcola_produzione_dettagliata(inizio_dt, ore_piazzamento, ore_pezzi, modali
     return corrente, pd.DataFrame(log_lavoro)
 
 # --- ESECUZIONE ---
-if st.button("Calcola Pianificazione"):
+if st.button("Calcola e Mostra Grafico"):
     dt_inizio = datetime.combine(data_inizio, ora_inizio)
     ore_pezzi_tot = (n_pezzi * tempo_pezzo) / 60
     
-    data_fine, df_log = calcola_produzione_dettagliata(dt_inizio, piazzamento_ore, ore_pezzi_tot, tipo_lavoro, turno_scelto)
+    data_fine, df_log = calcola_produzione_completa(dt_inizio, piazzamento_ore, ore_pezzi_tot, tipo_lavoro, turno_scelto)
     
     st.write("---")
-    st.header(f"🏁 Fine stimata: {data_fine.strftime('%A %d %B - ore %H:%M')}")
+    st.header(f"🏁 Consegna: {data_fine.strftime('%A %d %B - ore %H:%M')}")
 
     if not df_log.empty:
-        # Raggruppiamo per giorno e tipo per il grafico
-        df_plot = df_log.groupby(['Giorno', 'Tipo']).sum().reset_index()
+        # Mappa colori molto accesi per distinguere
+        colori = {
+            'PIAZZAMENTO': '#FFA500',   # Arancio
+            'PRODUZIONE': '#00CC96',    # Verde
+            'PAUSA': '#FF0000'          # ROSSO ACCESO
+        }
         
-        fig = px.bar(df_plot, x='Giorno', y='Ore', color='Tipo',
-                     title="Carico di Lavoro Giornaliero",
-                     color_discrete_map={'Piazzamento': '#FFA500', 'Produzione Pezzi': '#00CC96'},
-                     text_auto='.1f')
+        fig = px.bar(df_log, x='Giorno', y='Ore', color='Tipo',
+                     title="Analisi Giornaliera: Lavoro vs Pause",
+                     color_discrete_map=colori,
+                     hover_data={'Ore': True, 'Tipo': True})
         
-        fig.update_layout(barmode='stack', xaxis_title="Giorno", yaxis_title="Ore Macchina")
+        # Miglioramento bordi per vedere le sezioni piccole
+        fig.update_traces(marker_line_color='black', marker_line_width=1)
+        fig.update_layout(barmode='stack', yaxis_title="Ore Totali")
+        
         st.plotly_chart(fig, use_container_width=True)
 
-    st.info(f"Lavoro totale: {piazzamento_ore}h piazzamento + {ore_pezzi_tot:.1f}h produzione.")
+    st.info(f"Riepilogo: {piazzamento_ore}h setup + {ore_pezzi_tot:.1f}h lavoro effettivo.")
