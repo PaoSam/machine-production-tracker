@@ -178,4 +178,3 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     st.info(f"**⏱️ Tempo:** Piazzamento {tot_piaz_ore:.1f}h | Produzione {tot_prod_ore:.1f}h | Pause {pausa_ore:.1f}h | "
             f"**🏁 Fine:** {giorno_fine_it} {ora_fine} "
             f"({'⭐' if sabato_count > 0 else ''}{sabato_count} sabati 6h)")
-s
