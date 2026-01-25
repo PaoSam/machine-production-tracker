@@ -31,8 +31,9 @@ c4, c5 = st.columns(2)
 n_pezzi = c4.number_input("Numero di Pezzi", value=500)
 tempo_pezzo = c5.number_input("Tempo per Pezzo (minuti)", value=15.0)
 
-# ---------------- VALIDAZIONE ORARI ----------------
+# ---------------- VALIDAZIONE ORARI ESTESA ----------------
 def valida_orario():
+    # Validazione per Solo Mio Turno
     if tipo_lavoro == "Solo Mio Turno (Spezzato)":
         if "Mattina" in turno_attuale and ora_inizio > time(13, 50):
             @st.dialog("❌ ERRORE ORARIO", width="medium")
@@ -53,6 +54,28 @@ def valida_orario():
                     st.rerun()
             dialog_errore()
             st.stop()
+    
+    # Validazione per Due Turni (Continuo) - ora inizio DEVE essere tra 6:00-21:40
+    elif tipo_lavoro == "Due Turni (Continuo)":
+        if ora_inizio < time(6, 0):
+            @st.dialog("❌ ERRORE ORARIO", width="medium")
+            def dialog_errore():
+                st.error("⚠️ **Due Turni**: non puoi iniziare prima delle 6:00!")
+                st.info("👉 Scegli ora tra 6:00-21:40")
+                if st.button("✕ CHIUDI", type="secondary"):
+                    st.rerun()
+            dialog_errore()
+            st.stop()
+        
+        elif ora_inizio > time(21, 40):
+            @st.dialog("❌ ERRORE ORARIO", width="medium")
+            def dialog_errore():
+                st.error("⚠️ **Due Turni**: non puoi iniziare dopo le 21:40!")
+                st.info("👉 Scegli ora tra 6:00-21:40")
+                if st.button("✕ CHIUDI", type="secondary"):
+                    st.rerun()
+            dialog_errore()
+            st.stop()
 
 valida_orario()
 
@@ -66,26 +89,23 @@ def calcola_planning():
     while minuti_piaz + minuti_prod > 0:
         wd = corrente.weekday()
 
-        # Skip domenica
-        if wd == 6:
+        if wd == 6:  # Skip domenica
             corrente += timedelta(days=1)
             continue
 
-        # SABATO: sempre 6:00-12:00 (se lavora)
-        if wd == 5:
+        if wd == 5:  # SABATO: sempre 6:00-12:00
             if not lavora_sabato:
                 corrente += timedelta(days=1)
                 continue
             inizio_turno_giorno = time(6, 0)
             fine_turno_giorno = time(12, 0)
-            pause = []  # No pause sabato mattina
+            pause = []
         else:
-            # Giorni feriali normali
             if tipo_lavoro == "Due Turni (Continuo)":
                 inizio_turno_giorno = time(6, 0)
                 fine_turno_giorno = time(21, 40)
                 pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
-            else:  # Solo Mio Turno
+            else:
                 if "Mattina" in turno_attuale:
                     inizio_turno_giorno = time(6, 0)
                     fine_turno_giorno = time(13, 50)
@@ -95,13 +115,10 @@ def calcola_planning():
                     fine_turno_giorno = time(21, 40)
                     pause = [(time(19, 30), time(19, 50))]
 
-        # Parte da max(corrente.time(), inizio_turno_giorno)
         t_start = max(corrente.time(), inizio_turno_giorno)
         t = corrente.replace(hour=t_start.hour, minute=t_start.minute)
 
-        # Continua fino a fine_turno_giorno
         while t.time() < fine_turno_giorno and (minuti_piaz + minuti_prod) > 0:
-            # Skip pause
             in_pausa = False
             for p1, p2 in pause:
                 if p1 <= t.time() < p2:
@@ -129,9 +146,8 @@ def calcola_planning():
 
             t += timedelta(minutes=durata)
 
-        # Giorno successivo
         corrente = corrente + timedelta(days=1)
-        corrente = corrente.replace(hour=6, minute=0)  # Sempre da 6:00
+        corrente = corrente.replace(hour=6, minute=0)
 
     return pd.DataFrame(log)
 
