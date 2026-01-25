@@ -6,22 +6,27 @@ from datetime import datetime, timedelta, time
 st.set_page_config(page_title="Cronoprogramma Produzione", layout="wide")
 st.title("⚙️ Cronoprogramma Produzione Professionale")
 
-# ---------------- SIDEBAR ----------------
-st.sidebar.header("Configurazione Lavoro")
+# ---------------- CONFIGURAZIONE LAVORO SOPRA (NON SIDEBAR) ----------------
+st.header("⚙️ Configurazione Lavoro")
 
-lavora_sabato = st.sidebar.toggle("Lavora questo Sabato?", value=True)
+col1, col2 = st.columns(2)
+with col1:
+    lavora_sabato = st.toggle("Lavora questo Sabato?", value=True)
+    
+with col2:
+    turno_attuale = st.selectbox(
+        "Mio turno QUESTA SETTIMANA:",
+        ["Mattina (6:00-13:50)", "Pomeriggio (13:50-21:40)"]
+    )
 
-turno_attuale = st.sidebar.selectbox(
-    "Mio turno QUESTA SETTIMANA:",
-    ["Mattina (6:00-13:50)", "Pomeriggio (13:50-21:40)"]
-)
-
-tipo_lavoro = st.sidebar.radio(
+tipo_lavoro = st.radio(
     "Copertura Macchina:",
     ["Solo Mio Turno (Spezzato)", "Due Turni (Continuo)"]
 )
 
 # ---------------- INPUT ----------------
+st.header("📊 Dati Lavorazione")
+
 c1, c2, c3 = st.columns(3)
 data_inizio = c1.date_input("Data Inizio", datetime.now())
 ora_inizio = c2.time_input("Ora Inizio Effettiva", value=time(8, 0))
@@ -82,7 +87,6 @@ def calcola_planning():
         t = corrente.replace(hour=t_start.hour, minute=t_start.minute)
 
         while t.time() < fine_turno_giorno and (minuti_piaz + minuti_prod) > 0:
-            # AGGIUNGI PAUSE COME BLOCCHI ROSSI
             for p1, p2 in pause:
                 if p1 <= t.time() < p2:
                     log.append({
@@ -94,7 +98,7 @@ def calcola_planning():
                     })
                     t += timedelta(minutes=1)
                     break
-            else:  # Non in pausa
+            else:
                 tipo = "PIAZZAMENTO" if minuti_piaz > 0 else "PRODUZIONE"
                 durata = min(10, minuti_piaz if tipo == "PIAZZAMENTO" else minuti_prod)
 
@@ -118,8 +122,8 @@ def calcola_planning():
 
     return pd.DataFrame(log)
 
-# ---------------- RENDER SENZA ORARI NEL GRAFICO ----------------
-if st.button("🔄 CALCOLA PLANNING"):
+# ---------------- RENDER ----------------
+if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
 
     fig = px.bar(
@@ -131,7 +135,7 @@ if st.button("🔄 CALCOLA PLANNING"):
         }
     )
 
-    fig.update_traces(texttemplate=None, textposition=None)  # Togli testo dalle barre
+    fig.update_traces(texttemplate=None, textposition=None)
     fig.update_layout(
         yaxis=dict(title="Orario reale", autorange="reversed", dtick=1),
         height=800, barmode="overlay",
@@ -148,3 +152,4 @@ if st.button("🔄 CALCOLA PLANNING"):
             f"{len(df[df['Tipo']=='PRODUZIONE'])} produzione, "
             f"{pausa_count} min pause, "
             f"({'⭐' if sabato_count > 0 else ''}{sabato_count} sabati 6h)")
+
