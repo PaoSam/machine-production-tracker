@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, time
 st.set_page_config(page_title="Cronoprogramma Produzione", layout="wide")
 st.title("⚙️ Cronoprogramma Produzione Professionale")
 
-# ---------------- CONFIGURAZIONE LAVORO SOPRA (NON SIDEBAR) ----------------
+# ---------------- CONFIGURAZIONE LAVORO SOPRA ----------------
 st.header("⚙️ Configurazione Lavoro")
 
 col1, col2 = st.columns(2)
@@ -21,7 +21,7 @@ with col2:
 
 tipo_lavoro = st.radio(
     "Copertura Macchina:",
-    ["Solo Mio Turno (Spezzato)", "Due Turni (Continuo)"]
+    ["Turno unico", "Due Turni (Continuo)"]
 )
 
 # ---------------- INPUT ----------------
@@ -30,11 +30,11 @@ st.header("📊 Dati Lavorazione")
 c1, c2, c3 = st.columns(3)
 data_inizio = c1.date_input("Data Inizio", datetime.now())
 ora_inizio = c2.time_input("Ora Inizio Effettiva", value=time(8, 0))
-piazzamento_ore = c3.number_input("Tempo Piazzamento (ore)", value=1.0, step=0.5)
+piazzamento_ore = c3.number_input("Tempo Piazzamento", value=1.0, min_value=0.0, step=5/60)
 
 c4, c5 = st.columns(2)
 n_pezzi = c4.number_input("Numero di Pezzi", value=500)
-tempo_pezzo = c5.number_input("Tempo per Pezzo (minuti)", value=15.0)
+tempo_pezzo = c5.number_input("Tempo per Pezzo", value=15.0, step=1.0)
 
 # ---------------- VALIDAZIONE ORARI ----------------
 if "Mattina" in turno_attuale and ora_inizio > time(13, 50):
@@ -73,7 +73,7 @@ def calcola_planning():
                 inizio_turno_giorno = time(6, 0)
                 fine_turno_giorno = time(21, 40)
                 pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
-            else:
+            else:  # Turno unico
                 if "Mattina" in turno_attuale:
                     inizio_turno_giorno = time(6, 0)
                     fine_turno_giorno = time(13, 50)
@@ -122,9 +122,15 @@ def calcola_planning():
 
     return pd.DataFrame(log)
 
-# ---------------- RENDER ----------------
+# ---------------- RENDER CON ORARIO FINE ----------------
 if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
+    
+    # Calcola orario fine
+    ultimo_blocco = df.iloc[-1]
+    orario_fine = ultimo_blocco['Inizio'] + ultimo_blocco['Durata']
+    giorno_fine = ultimo_blocco['Giorno']
+    ora_fine = f"{int(orario_fine):02d}:{int((orario_fine%1)*60):02d}"
 
     fig = px.bar(
         df, x="Giorno", y="Durata", base="Inizio", color="Tipo", text=None,
@@ -151,5 +157,5 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     st.info(f"**Totale:** {len(df[df['Tipo']=='PIAZZAMENTO'])} piazzamento, "
             f"{len(df[df['Tipo']=='PRODUZIONE'])} produzione, "
             f"{pausa_count} min pause, "
+            f"**Fine:** {giorno_fine} {ora_fine} "
             f"({'⭐' if sabato_count > 0 else ''}{sabato_count} sabati 6h)")
-
