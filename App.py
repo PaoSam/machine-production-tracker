@@ -31,20 +31,16 @@ c4, c5 = st.columns(2)
 n_pezzi = c4.number_input("Numero di Pezzi", value=500)
 tempo_pezzo = c5.number_input("Tempo per Pezzo (minuti)", value=15.0)
 
-# ---------------- VALIDAZIONE ORARI SEMPLIFICATA ----------------
-def valida_orario():
-    if "Mattina" in turno_attuale and ora_inizio > time(13, 50):
-        st.dialog("❌ ERRORE ORARIO", width="medium")(
-            lambda: st.error("⚠️ **TUO TURNO MATTINA**: non puoi iniziare dopo le 13:50!\n👉 Scegli ora 6:00-13:50")
-        )
-        st.stop()
-    elif "Pomeriggio" in turno_attuale and ora_inizio < time(13, 50):
-        st.dialog("❌ ERRORE ORARIO", width="medium")(
-            lambda: st.error("⚠️ **TUO TURNO POMERIGGIO**: non puoi iniziare prima delle 13:50!\n👉 Scegli ora 13:50-21:40")
-        )
-        st.stop()
+# ---------------- VALIDAZIONE ORARI CON ST.ERROR ----------------
+if "Mattina" in turno_attuale and ora_inizio > time(13, 50):
+    st.error("❌ **ERRORE**: Turno Mattina - non puoi iniziare dopo le 13:50!")
+    st.info("👉 Scegli ora tra 6:00-13:50")
+    st.stop()
 
-valida_orario()
+if "Pomeriggio" in turno_attuale and ora_inizio < time(13, 50):
+    st.error("❌ **ERRORE**: Turno Pomeriggio - non puoi iniziare prima delle 13:50!")
+    st.info("👉 Scegli ora tra 13:50-21:40")
+    st.stop()
 
 # ---------------- LOGICA CON SABATO 6-12 ----------------
 def calcola_planning():
@@ -72,7 +68,7 @@ def calcola_planning():
                 inizio_turno_giorno = time(6, 0)
                 fine_turno_giorno = time(21, 40)
                 pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
-            else:  # Solo Mio Turno
+            else:
                 if "Mattina" in turno_attuale:
                     inizio_turno_giorno = time(6, 0)
                     fine_turno_giorno = time(13, 50)
