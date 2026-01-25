@@ -41,9 +41,8 @@ def valida_orario():
                 st.info("👉 Scegli ora tra 6:00-13:50 o cambia in 'Pomeriggio'")
                 if st.button("✕ CHIUDI", type="secondary"):
                     st.rerun()
-            
             dialog_errore()
-            st.stop()  # Blocca l'app
+            st.stop()
             
         elif "Pomeriggio" in turno_attuale and ora_inizio < time(13, 50):
             @st.dialog("❌ ERRORE ORARIO", width="medium")
@@ -52,14 +51,12 @@ def valida_orario():
                 st.info("👉 Scegli ora tra 13:50-21:40 o cambia in 'Mattina'")
                 if st.button("✕ CHIUDI", type="secondary"):
                     st.rerun()
-            
             dialog_errore()
             st.stop()
 
-# Esegui validazione
 valida_orario()
 
-# ---------------- LOGICA ----------------
+# ---------------- LOGICA CON SABATO 6-12 ----------------
 def calcola_planning():
     minuti_piaz = piazzamento_ore * 60
     minuti_prod = n_pezzi * tempo_pezzo
@@ -69,33 +66,42 @@ def calcola_planning():
     while minuti_piaz + minuti_prod > 0:
         wd = corrente.weekday()
 
-        if wd == 6:  # Skip domenica
+        # Skip domenica
+        if wd == 6:
             corrente += timedelta(days=1)
             continue
 
-        if wd == 5 and not lavora_sabato:  # Skip sabato
-            corrente += timedelta(days=1)
-            continue
-
-        # Orari turno
-        if tipo_lavoro == "Due Turni (Continuo)":
+        # SABATO: sempre 6:00-12:00 (se lavora)
+        if wd == 5:
+            if not lavora_sabato:
+                corrente += timedelta(days=1)
+                continue
             inizio_turno_giorno = time(6, 0)
-            fine_turno_giorno = time(21, 40)
-            pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
+            fine_turno_giorno = time(12, 0)
+            pause = []  # No pause sabato mattina
         else:
-            if "Mattina" in turno_attuale:
+            # Giorni feriali normali
+            if tipo_lavoro == "Due Turni (Continuo)":
                 inizio_turno_giorno = time(6, 0)
-                fine_turno_giorno = time(13, 50)
-                pause = [(time(12, 0), time(12, 20))]
-            else:
-                inizio_turno_giorno = time(13, 50)
                 fine_turno_giorno = time(21, 40)
-                pause = [(time(19, 30), time(19, 50))]
+                pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
+            else:  # Solo Mio Turno
+                if "Mattina" in turno_attuale:
+                    inizio_turno_giorno = time(6, 0)
+                    fine_turno_giorno = time(13, 50)
+                    pause = [(time(12, 0), time(12, 20))]
+                else:
+                    inizio_turno_giorno = time(13, 50)
+                    fine_turno_giorno = time(21, 40)
+                    pause = [(time(19, 30), time(19, 50))]
 
+        # Parte da max(corrente.time(), inizio_turno_giorno)
         t_start = max(corrente.time(), inizio_turno_giorno)
         t = corrente.replace(hour=t_start.hour, minute=t_start.minute)
 
+        # Continua fino a fine_turno_giorno
         while t.time() < fine_turno_giorno and (minuti_piaz + minuti_prod) > 0:
+            # Skip pause
             in_pausa = False
             for p1, p2 in pause:
                 if p1 <= t.time() < p2:
@@ -123,8 +129,9 @@ def calcola_planning():
 
             t += timedelta(minutes=durata)
 
+        # Giorno successivo
         corrente = corrente + timedelta(days=1)
-        corrente = corrente.replace(hour=inizio_turno_giorno.hour, minute=inizio_turno_giorno.minute)
+        corrente = corrente.replace(hour=6, minute=0)  # Sempre da 6:00
 
     return pd.DataFrame(log)
 
@@ -145,4 +152,7 @@ if st.button("🔄 CALCOLA PLANNING"):
 
     st.plotly_chart(fig, use_container_width=True)
     
-    st.info(f"**Totale:** {len(df[df['Tipo']=='PIAZZAMENTO'])} blocchi piazzamento, {len(df[df['Tipo']=='PRODUZIONE'])} blocchi produzione")
+    sabato_count = len(df[df["Giorno"].str.contains("Sab")])
+    st.info(f"**Totale:** {len(df[df['Tipo']=='PIAZZAMENTO'])} blocchi piazzamento, "
+            f"{len(df[df['Tipo']=='PRODUZIONE'])} blocchi produzione "
+            f"({'⭐' if sabato_count > 0 else ''}Inclusi {sabato_count} sabati 6h)")
