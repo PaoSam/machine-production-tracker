@@ -3,11 +3,12 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta, time
 
-st.set_page_config(page_title="Planning Officina", layout="wide")
+st.set_page_config(page_title="Cronoprogramma Produzione", layout="wide")
 st.title("⚙️ Cronoprogramma Produzione Professionale")
 
-# --- SIDEBAR ---
+# ---------------- SIDEBAR ----------------
 st.sidebar.header("Configurazione Lavoro")
+
 lavora_sabato = st.sidebar.toggle("Lavora questo Sabato?", value=True)
 
 turno_attuale = st.sidebar.selectbox(
@@ -20,59 +21,75 @@ tipo_lavoro = st.sidebar.radio(
     ["Solo Mio Turno (Spezzato)", "Due Turni (Continuo)"]
 )
 
-# --- INPUT ---
-col1, col2, col3 = st.columns(3)
-data_inizio_val = col1.date_input("Data Inizio", datetime.now())
-ora_inizio_val = col2.time_input("Ora Inizio Effettiva", value=time(7, 0))
-piazzamento_ore = col3.number_input("Tempo Piazzamento (ore)", value=1.0, step=0.5)
+# ---------------- INPUT ----------------
+c1, c2, c3 = st.columns(3)
+data_inizio = c1.date_input("Data Inizio", datetime.now())
+ora_inizio = c2.time_input("Ora Inizio Effettiva", value=time(8, 0))
+piazzamento_ore = c3.number_input("Tempo Piazzamento (ore)", value=1.0, step=0.5)
 
-col4, col5 = st.columns(2)
-n_pezzi = col4.number_input("Numero di Pezzi", value=60)
-tempo_pezzo = col5.number_input("Tempo per Pezzo (minuti)", value=15.0, step=0.1)
+c4, c5 = st.columns(2)
+n_pezzi = c4.number_input("Numero di Pezzi", value=500)
+tempo_pezzo = c5.number_input("Tempo per Pezzo (minuti)", value=15.0)
 
-# --- CALCOLO ---
-def calcola_planning(data_start, ora_start, piaz_h, prod_h):
-    corrente = datetime.combine(data_start, ora_start)
-    min_piaz = piaz_h * 60
-    min_prod = prod_h * 60
+# ---------------- LOGICA ----------------
+def calcola_planning():
+    minuti_piaz = piazzamento_ore * 60
+    minuti_prod = n_pezzi * tempo_pezzo
+
+    corrente = datetime.combine(data_inizio, ora_inizio)
+    primo_giorno = True
     log = []
 
-    primo_giorno = True
-
-    while min_piaz + min_prod > 0:
+    while minuti_piaz + minuti_prod > 0:
         wd = corrente.weekday()
+
+        # Domenica
         if wd == 6:
             corrente += timedelta(days=1)
             corrente = corrente.replace(hour=6, minute=0)
             primo_giorno = False
             continue
 
-        # Fasce
-        if tipo_lavoro == "Solo Mio Turno (Spezzato)":
+        # Sabato
+        if wd == 5 and not lavora_sabato:
+            corrente += timedelta(days=1)
+            corrente = corrente.replace(hour=6, minute=0)
+            primo_giorno = False
+            continue
+
+        # Definizione turno
+        if tipo_lavoro == "Due Turni (Continuo)":
+            inizio_turno = corrente.time() if primo_giorno else time(6, 0)
+            fine_turno = time(21, 40)
+            pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
+        else:
             if "Mattina" in turno_attuale:
-                inizio = corrente.time() if primo_giorno else time(6, 0)
-                fine = time(13, 50)
+                inizio_turno = corrente.time() if primo_giorno else time(6, 0)
+                fine_turno = time(13, 50)
                 pause = [(time(12, 0), time(12, 20))]
             else:
-                inizio = corrente.time() if primo_giorno else time(13, 50)
-                fine = time(21, 40)
+                inizio_turno = corrente.time() if primo_giorno else time(13, 50)
+                fine_turno = time(21, 40)
                 pause = [(time(19, 30), time(19, 50))]
-        else:
-            inizio = corrente.time() if primo_giorno else time(6, 0)
-            fine = time(21, 40)
-            pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
 
-        primo_giorno = False
+        t = corrente.replace(hour=inizio_turno.hour, minute=inizio_turno.minute)
 
-        t = corrente.replace(hour=inizio.hour, minute=inizio.minute)
-
-        while t.time() < fine and min_piaz + min_prod > 0:
-            if any(p[0] <= t.time() < p[1] for p in pause):
-                t += timedelta(minutes=1)
+        while t.time() < fine_turno and (minuti_piaz + minuti_prod) > 0:
+            # pausa
+            in_pausa = False
+            for p1, p2 in pause:
+                if p1 <= t.time() < p2:
+                    t += timedelta(minutes=1)
+                    in_pausa = True
+                    break
+            if in_pausa:
                 continue
 
-            tipo = "PIAZZAMENTO" if min_piaz > 0 else "PRODUZIONE"
-            durata = min(10, min_piaz if tipo == "PIAZZAMENTO" else min_prod)
+            tipo = "PIAZZAMENTO" if minuti_piaz > 0 else "PRODUZIONE"
+            durata = min(
+                10,
+                minuti_piaz if tipo == "PIAZZAMENTO" else minuti_prod
+            )
 
             log.append({
                 "Giorno": t.strftime("%a %d/%m"),
@@ -83,25 +100,21 @@ def calcola_planning(data_start, ora_start, piaz_h, prod_h):
             })
 
             if tipo == "PIAZZAMENTO":
-                min_piaz -= durata
+                minuti_piaz -= durata
             else:
-                min_prod -= durata
+                minuti_prod -= durata
 
             t += timedelta(minutes=durata)
 
         corrente += timedelta(days=1)
         corrente = corrente.replace(hour=6, minute=0)
+        primo_giorno = False
 
     return pd.DataFrame(log)
 
-# --- RENDER ---
+# ---------------- RENDER ----------------
 if st.button("CALCOLA PLANNING"):
-    df = calcola_planning(
-        data_inizio_val,
-        ora_inizio_val,
-        piazzamento_ore,
-        (n_pezzi * tempo_pezzo) / 60
-    )
+    df = calcola_planning()
 
     fig = px.bar(
         df,
@@ -109,11 +122,19 @@ if st.button("CALCOLA PLANNING"):
         y="Durata",
         base="Inizio",
         color="Tipo",
-        text="Label"
+        text="Label",
+        color_discrete_map={
+            "PIAZZAMENTO": "#FFA500",
+            "PRODUZIONE": "#00CC96"
+        }
     )
 
     fig.update_layout(
-        yaxis=dict(autorange="reversed", dtick=1),
+        yaxis=dict(
+            title="Orario reale",
+            autorange="reversed",
+            dtick=1
+        ),
         height=800,
         barmode="overlay"
     )
