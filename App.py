@@ -130,7 +130,7 @@ def calcola_planning():
 
     return pd.DataFrame(log)
 
-# ---------------- RENDER ----------------
+# ---------------- RENDER ZOOM ABILITATO ----------------
 if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
     
@@ -153,14 +153,13 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
 
     fig.update_traces(texttemplate=None, textposition=None)
     fig.update_layout(
-        yaxis=dict(title="Orario reale", autorange="reversed", dtick=1, fixedrange=True),
-        xaxis=dict(fixedrange=True, tickangle=45),
+        yaxis=dict(title="Orario reale", autorange="reversed", dtick=1),
+        xaxis=dict(tickangle=45),
         height=700,
         barmode="overlay",
         title="Cronoprogramma Produzione Macchine CNC",
         legend_title="Legenda:",
-        showlegend=True,
-        dragmode=False
+        showlegend=True
     )
 
     st.plotly_chart(fig, use_container_width=True)
