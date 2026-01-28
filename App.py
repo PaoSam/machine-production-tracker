@@ -3,35 +3,28 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta, time
 
-# ✅ CONFIGURAZIONE PAGINA
-st.set_page_config(
-    page_title="CronoCNC", 
-    page_icon="⚙️",
-    layout="wide"
-)
+# Prova a importare holidays per i festivi automatici
+try:
+    import holidays
+    it_holidays = holidays.Italy()
+except ImportError:
+    it_holidays = []
 
+# ✅ CONFIGURAZIONE PAGINA
+st.set_page_config(page_title="CronoCNC", page_icon="⚙️", layout="wide")
 st.title("⚙️ CronoCNC - Pianificazione Produzione")
 
 # ---------------- FUNZIONI UTILI ----------------
-def italiano_giorno(giorno):
-    trad = {
-        "Mon": "Lun", "Tue": "Mar", "Wed": "Mer", "Thu": "Gio", 
-        "Fri": "Ven", "Sat": "Sab", "Sun": "Dom"
-    }
-    return trad[giorno[:3]] + giorno[3:]
+def italiano_giorno(giorno_str):
+    trad = {"Mon": "Lun", "Tue": "Mar", "Wed": "Mer", "Thu": "Gio", "Fri": "Ven", "Sat": "Sab", "Sun": "Dom"}
+    return trad.get(giorno_str[:3], giorno_str[:3]) + giorno_str[3:]
 
 # ---------------- CONFIGURAZIONE LAVORO ----------------
 st.sidebar.header("⚙️ Configurazione")
 with st.sidebar:
     lavora_sabato = st.toggle("Lavora questo Sabato?", value=True)
-    turno_iniziale = st.selectbox(
-        "Mio turno QUESTA SETTIMANA:",
-        ["Mattina (6:00-13:50)", "Pomeriggio (13:50-21:40)"]
-    )
-    tipo_lavoro = st.radio(
-        "Copertura Macchina:",
-        ["Turno unico", "Due Turni (Continuo)"]
-    )
+    turno_iniziale = st.selectbox("Mio turno QUESTA SETTIMANA:", ["Mattina (6:00-13:50)", "Pomeriggio (13:50-21:40)"])
+    tipo_lavoro = st.radio("Copertura Macchina:", ["Turno unico", "Due Turni (Continuo)"])
 
 # ---------------- INPUT DATI ----------------
 st.header("📊 Dati Lavorazione")
@@ -51,131 +44,87 @@ def calcola_planning():
     corrente = datetime.combine(data_inizio, ora_inizio)
     log = []
     
-    # Identifico la settimana iniziale per gestire l'alternanza
     settimana_iniziale = data_inizio.isocalendar()[1]
     
     while minuti_piaz + minuti_prod > 0:
         wd = corrente.weekday()
-        settimana_corrente = corrente.isocalendar()[1]
-        
-        # Gestione Alternanza Turno (Nota Salvata)
-        # Se la settimana è diversa dalla iniziale, invertiamo il turno
-        turno_settimanale = turno_iniziale
-        if (settimana_corrente - settimana_iniziale) % 2 != 0:
-            if "Mattina" in turno_iniziale:
-                turno_settimanale = "Pomeriggio (13:50-21:40)"
-            else:
-                turno_settimanale = "Mattina (6:00-13:50)"
-
-        if wd == 6:  # Domenica: Salta
+        # Festività e Domeniche
+        if wd == 6 or corrente.date() in it_holidays:
             corrente += timedelta(days=1)
             corrente = corrente.replace(hour=6, minute=0)
             continue
 
-        if wd == 5:  # SABATO: 6:00-12:00
+        # Alternanza turno settimanale
+        settimana_corrente = corrente.isocalendar()[1]
+        turno_settimanale = turno_iniziale
+        if (settimana_corrente - settimana_iniziale) % 2 != 0:
+            turno_settimanale = "Pomeriggio (13:50-21:40)" if "Mattina" in turno_iniziale else "Mattina (6:00-13:50)"
+
+        # Orari del giorno
+        if wd == 5: # Sabato
             if not lavora_sabato:
-                corrente += timedelta(days=1)
-                corrente = corrente.replace(hour=6, minute=0)
+                corrente += timedelta(days=1); corrente = corrente.replace(hour=6, minute=0)
                 continue
-            inizio_turno_giorno = time(6, 0)
-            fine_turno_giorno = time(12, 0)
-            pause = []
-        else: # LUN-VEN
+            inizio_t, fine_t, pause = time(6, 0), time(12, 0), []
+        else: # Lun-Ven
             if tipo_lavoro == "Due Turni (Continuo)":
-                inizio_turno_giorno = time(6, 0)
-                fine_turno_giorno = time(21, 40)
+                inizio_t, fine_t = time(6, 0), time(21, 40)
                 pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
             else:
                 if "Mattina" in turno_settimanale:
-                    inizio_turno_giorno = time(6, 0)
-                    fine_turno_giorno = time(13, 50)
-                    pause = [(time(12, 0), time(12, 20))]
+                    inizio_t, fine_t, pause = time(6, 0), time(13, 50), [(time(12, 0), time(12, 20))]
                 else:
-                    inizio_turno_giorno = time(13, 50)
-                    fine_turno_giorno = time(21, 40)
-                    pause = [(time(19, 30), time(19, 50))]
+                    inizio_t, fine_t, pause = time(13, 50), time(21, 40), [(time(19, 30), time(19, 50))]
 
-        # Se iniziamo a un'ora successiva alla fine turno, passiamo al giorno dopo
-        if corrente.time() >= fine_turno_giorno:
-            corrente += timedelta(days=1)
-            corrente = corrente.replace(hour=6, minute=0)
+        if corrente.time() >= fine_t:
+            corrente += timedelta(days=1); corrente = corrente.replace(hour=6, minute=0)
             continue
 
-        t_start = max(corrente.time(), inizio_turno_giorno)
-        t = corrente.replace(hour=t_start.hour, minute=t_start.minute)
+        t = corrente.replace(hour=max(corrente.time(), inizio_t).hour, minute=max(corrente.time(), inizio_t).minute)
 
-        while t.time() < fine_turno_giorno and (minuti_piaz + minuti_prod) > 0:
+        while t.time() < fine_t and (minuti_piaz + minuti_prod) > 0:
             for p1, p2 in pause:
                 if p1 <= t.time() < p2:
-                    log.append({
-                        "Giorno": t.strftime("%a %d/%m"),
-                        "Inizio": t.hour + t.minute / 60,
-                        "Durata": 1/60,
-                        "Tipo": "PAUSA",
-                        "MinutiProd": 0
-                    })
-                    t += timedelta(minutes=1)
-                    break
+                    log.append({"Data": t.date(), "Giorno": t.strftime("%a %d/%m"), "Inizio": t.hour + t.minute/60, "Durata": 1/60, "Tipo": "PAUSA", "MinutiProd": 0})
+                    t += timedelta(minutes=1); break
             else:
                 tipo = "PIAZZAMENTO" if minuti_piaz > 0 else "PRODUZIONE"
                 durata = min(10, minuti_piaz if tipo == "PIAZZAMENTO" else minuti_prod)
-                
-                log.append({
-                    "Giorno": t.strftime("%a %d/%m"),
-                    "Inizio": t.hour + t.minute / 60,
-                    "Durata": durata / 60,
-                    "Tipo": tipo,
-                    "MinutiProd": durata if tipo == "PRODUZIONE" else 0
-                })
-
-                if tipo == "PIAZZAMENTO":
-                    minuti_piaz -= durata
-                else:
-                    minuti_prod -= durata
+                log.append({"Data": t.date(), "Giorno": t.strftime("%a %d/%m"), "Inizio": t.hour + t.minute/60, "Durata": durata/60, "Tipo": tipo, "MinutiProd": durata if tipo == "PRODUZIONE" else 0})
+                if tipo == "PIAZZAMENTO": minuti_piaz -= durata
+                else: minuti_prod -= durata
                 t += timedelta(minutes=durata)
 
-        corrente = t + timedelta(days=1)
-        corrente = corrente.replace(hour=6, minute=0)
+        corrente = t + timedelta(days=1); corrente = corrente.replace(hour=6, minute=0)
 
     return pd.DataFrame(log)
 
-# ---------------- RENDER RISULTATI ----------------
+# ---------------- RENDER ----------------
 if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
     df = calcola_planning()
+    
+    # ORDINE CORRETTO: Raggruppiamo per Data (che è ordinabile) e poi formattiamo
+    pezzi_df = df.groupby('Data')['MinutiProd'].sum().reset_index()
+    pezzi_df['Pezzi'] = (pezzi_df['MinutiProd'] / tempo_pezzo).round(0).astype(int)
+    pezzi_df['Giorno_IT'] = pezzi_df['Data'].apply(lambda x: italiano_giorno(x.strftime("%a %d/%m")))
+    
+    # Mostriamo solo i giorni dove effettivamente si producono pezzi > 0
+    pezzi_df = pezzi_df[pezzi_df['Pezzi'] > 0]
+
+    st.subheader("📦 Target Pezzi Giornalieri")
+    m_cols = st.columns(len(pezzi_df))
+    for i, row in enumerate(pezzi_df.itertuples()):
+        m_cols[i].metric(label=row.Giorno_IT, value=f"{row.Pezzi} pz")
+
+    # Grafico (usiamo Giorno per l'asse X ma assicuriamoci che l'ordine sia quello della data)
     df['Giorno_IT'] = df['Giorno'].apply(italiano_giorno)
+    df = df.sort_values('Data') # Forza ordine cronologico
+
+    fig = px.bar(df, x="Giorno_IT", y="Durata", base="Inizio", color="Tipo",
+                 color_discrete_map={"PIAZZAMENTO": "#FFA500", "PRODUZIONE": "#00CC96", "PAUSA": "#FF0000"})
     
-    # Calcolo pezzi giornalieri
-    pezzi_per_giorno = df.groupby('Giorno_IT')['MinutiProd'].sum() / tempo_pezzo
-    pezzi_per_giorno = pezzi_per_giorno.round(0).astype(int)
-
-    # Info fine lavoro
-    ultimo_blocco = df.iloc[-1]
-    orario_fine_dec = ultimo_blocco['Inizio'] + ultimo_blocco['Durata']
-    giorno_fine = ultimo_blocco['Giorno_IT']
-    ora_fine = f"{int(orario_fine_dec):02d}:{int((orario_fine_dec%1)*60):02d}"
-
-    # Visualizzazione metriche pezzi
-    st.subheader("📦 Target Pezzi da produrre")
-    m_cols = st.columns(len(pezzi_per_giorno))
-    for i, (giorno, qta) in enumerate(pezzi_per_giorno.items()):
-        m_cols[i].metric(label=giorno, value=f"{qta} pz")
-
-    # Grafico
-    fig = px.bar(
-        df, x="Giorno_IT", y="Durata", base="Inizio", color="Tipo",
-        color_discrete_map={"PIAZZAMENTO": "#FFA500", "PRODUZIONE": "#00CC96", "PAUSA": "#FF0000"}
-    )
-
-    fig.add_hline(y=orario_fine_dec, line_dash="dash", line_color="blue",
-                  annotation_text=f"🏁 FINE {ora_fine}", annotation_position="top right")
-
-    fig.update_layout(
-        yaxis=dict(title="Orario", autorange="reversed", dtick=1, range=[22, 6]),
-        height=700, barmode="overlay",
-        title="Cronoprogramma Produzione Macchine CNC"
-    )
-
+    fig.update_layout(yaxis=dict(title="Orario", autorange="reversed", dtick=1, range=[22, 6]),
+                      xaxis={'categoryorder':'array', 'categoryarray':pezzi_df['Giorno_IT'].tolist()},
+                      height=600, barmode="overlay")
+    
     st.plotly_chart(fig, use_container_width=True)
-    
-    st.info(f"**⏱️ Totale ore produzione:** {round((n_pezzi * tempo_pezzo)/60, 1)}h | "
-            f"**🏁 Consegna stimata:** {giorno_fine} alle {ora_fine}")
