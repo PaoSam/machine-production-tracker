@@ -128,3 +128,18 @@ if st.button("🔄 CALCOLA PLANNING", type="primary", use_container_width=True):
                       height=600, barmode="overlay")
     
     st.plotly_chart(fig, use_container_width=True)
+# --- CODICE PER AGGIUNGERE LA LINEA DI FINE AL GRAFICO ---
+
+# 1. Calcolo l'orario di fine basandomi sull'ultimo blocco di produzione
+ultimo_blocco = df.iloc[-1]
+orario_fine_dec = ultimo_blocco['Inizio'] + ultimo_blocco['Durata']
+ora_fine_formattata = f"{int(orario_fine_dec):02d}:{int((orario_fine_dec%1)*60):02d}"
+
+# 2. Aggiungo la linea e l'etichetta al grafico Plotly
+fig.add_hline(
+    y=orario_fine_dec, 
+    line_dash="dash", 
+    line_color="blue",
+    annotation_text=f"🏁 FINE ORE {ora_fine_formattata}", 
+    annotation_position="top right"
+)
