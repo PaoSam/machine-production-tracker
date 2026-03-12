@@ -1,40 +1,7 @@
-import streamlit as st
-import pandas as pd
-from datetime import datetime, timedelta, time
-
-try:
-    import holidays
-    it_holidays = holidays.Italy()
-except:
-    it_holidays = []
-
-st.set_page_config(page_title="CronoCNC", layout="wide")
-
-st.title("⚙️ CronoCNC - Pianificazione Produzione")
-
-# ---------------- SIDEBAR ----------------
-
-st.sidebar.header("Configurazione")
-
-lavora_sabato = st.sidebar.toggle("Lavora Sabato", True)
-
-turno_iniziale = st.sidebar.selectbox(
-    "Turno iniziale settimana",
-    ["Mattina", "Pomeriggio"]
-)
-
-tipo_lavoro = st.sidebar.radio(
-    "Copertura macchina",
-    ["Turno unico", "Due Turni (Continuo)"]
-)
-
-# ---------------- INPUT ----------------
-
-st.header("Dati lavorazione")
-
-c1,c2,c3 = st.columns(3)
-
-data_inizio = c1.date_input("Data inizio", datetime.now())
+File "/mount/src/machine-production-tracker/App.py", line 210
+      st.plotly_chart(fig,use_container_width=True)ora_inizio = c2.time_input("Ora inizio", value=time(8,0))
+                                                   ^
+SyntaxError: invalid syntaxdata_inizio = c1.date_input("Data inizio", datetime.now())
 ora_inizio = c2.time_input("Ora inizio", value=time(8,0))
 piazzamento_ore = c3.number_input("Piazzamento ore", value=1.0)
 
