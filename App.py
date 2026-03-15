@@ -1,15 +1,3 @@
-Ecco il codice **completamente migliorato**. 
-
-**Cosa ho cambiato per eliminare tutti gli arrotondamenti e le approssimazioni**:
-- Niente più passo fisso di 5 minuti → ora il tempo avanza **esattamente** fino al prossimo evento (fine turno, inizio pausa, completamento piazzamento o pezzo).
-- Nessun rischio di lavorare oltre la fine turno o dentro le pause.
-- Calcolo esatto con minuti frazionari (float precisi).
-- Ora finale calcolata dal tempo `corrente` dopo l'ultimo avanzamento (non più dall'ultima riga del log).
-- `Ora` mostrata con secondi (`%H:%M:%S`) per precisione assoluta.
-- `Ore lavorate` **senza `.round(2)`** (mostra il valore esatto).
-- Log più pulito (una riga per ogni blocco di lavoro continuo, ma i totali giornalieri rimangono identici).
-
-```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -181,6 +169,7 @@ def calcola():
 
     df = pd.DataFrame(log)
     return df, corrente  # ritorna anche il tempo esatto di fine
+
 
 # ---------------- ESECUZIONE ----------------
 if st.button("CALCOLA PLANNING"):
