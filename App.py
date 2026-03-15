@@ -250,8 +250,8 @@ if st.button("CALCOLA PLANNING"):
         f"🏁 Fine lavorazione prevista: {fine_prevista.date()} ore {fine_prevista.strftime('%H:%M:%S')}"
     )
 
-    # ==================== GRAFICO CON BARRE PIENE ====================
-    st.subheader("📊 Orari Reali Turno - Aree piene per attività")
+    # ==================== GRAFICO CON ORE DI FINE PRODUZIONE ====================
+    st.subheader("📊 Orari Reali Turno - Con ore di fine produzione")
 
     chart_df = df.copy()
     
@@ -260,6 +260,11 @@ if st.button("CALCOLA PLANNING"):
         chart_df["Start"].dt.hour +
         chart_df["Start"].dt.minute / 60.0 +
         chart_df["Start"].dt.second / 3600.0
+    )
+    chart_df["End_Ore"] = (
+        chart_df["End"].dt.hour +
+        chart_df["End"].dt.minute / 60.0 +
+        chart_df["End"].dt.second / 3600.0
     )
     chart_df["Durata_Ore"] = chart_df["Minuti"] / 60.0
     
@@ -272,8 +277,8 @@ if st.button("CALCOLA PLANNING"):
     # Aggiungiamo il giorno della settimana
     chart_df["Giorno_Settimana"] = chart_df["Data"].apply(nome_giorno_italiano)
     
-    # Creiamo una colonna per le etichette
-    chart_df["Etichetta"] = chart_df.apply(lambda row: f"{int(row['Pezzi'])} pz" if row['Pezzi'] > 0 else "", axis=1)
+    # Formattiamo le ore per le etichette
+    chart_df["Ora_Fine_Formattata"] = chart_df["End"].dt.strftime("%H:%M")
     
     # Creiamo il grafico con barre
     fig = px.bar(
@@ -294,7 +299,8 @@ if st.button("CALCOLA PLANNING"):
             "Minuti": True,
             "Pezzi": True,
             "Giorno_Settimana": True,
-            "Durata_Ore": True
+            "Durata_Ore": True,
+            "Ora_Fine_Formattata": True
         }
     )
 
@@ -319,8 +325,8 @@ if st.button("CALCOLA PLANNING"):
         ),
         margin=dict(l=60, r=30, t=80, b=100),
         hovermode="x unified",
-        bargap=0.1,  # Spazio tra le barre di giorni diversi
-        bargroupgap=0  # Nessuno spazio tra barre dello stesso giorno
+        bargap=0.1,
+        bargroupgap=0
     )
 
     # Configurazione asse X con giorni della settimana
@@ -343,7 +349,7 @@ if st.button("CALCOLA PLANNING"):
 
     # Configurazione asse Y con scala invertita (6:00 in alto)
     fig.update_yaxes(
-        range=[22.5, 5.5],  # Invertito per avere 6:00 in alto
+        range=[22.5, 5.5],
         tickmode="linear",
         tick0=6,
         dtick=1,
@@ -361,31 +367,70 @@ if st.button("CALCOLA PLANNING"):
         title_font=dict(size=12)
     )
 
-    # Personalizzazione delle barre (senza text parameter che causa l'errore)
+    # Personalizzazione delle barre
     fig.update_traces(
         marker_line_width=1,
         marker_line_color="black",
         opacity=0.9
     )
 
-    # Aggiungiamo le etichette con i numeri dei pezzi separatamente
-    for idx, row in chart_df[chart_df["Pezzi"] > 0].iterrows():
-        fig.add_annotation(
-            x=row["Data"],
-            y=row["Start_Ore"] + row["Durata_Ore_Visibile"]/2,
-            text=f"{int(row['Pezzi'])} pz",
-            showarrow=False,
-            font=dict(size=10, color="black", family='Arial'),
-            align="center",
-            xanchor="center",
-            yanchor="middle"
-        )
+    # Aggiungiamo le etichette con i numeri dei pezzi e le ore di fine
+    for idx, row in chart_df.iterrows():
+        # Etichetta con ora di fine in alto alla barra
+        if row["Tipo"] == "PRODUZIONE":
+            # Per la produzione, mostriamo pezzi e ora fine
+            fig.add_annotation(
+                x=row["Data"],
+                y=row["Start_Ore"] + row["Durata_Ore_Visibile"],
+                text=f"{int(row['Pezzi'])} pz<br>fine {row['Ora_Fine_Formattata']}",
+                showarrow=False,
+                font=dict(size=9, color="black", family='Arial'),
+                align="center",
+                xanchor="center",
+                yanchor="bottom",
+                bgcolor="rgba(255,255,255,0.7)",
+                bordercolor="black",
+                borderwidth=0.5,
+                borderpad=2
+            )
+        elif row["Tipo"] == "PIAZZAMENTO":
+            # Per il piazzamento, mostriamo solo ora fine
+            fig.add_annotation(
+                x=row["Data"],
+                y=row["Start_Ore"] + row["Durata_Ore_Visibile"],
+                text=f"fine {row['Ora_Fine_Formattata']}",
+                showarrow=False,
+                font=dict(size=9, color="black", family='Arial'),
+                align="center",
+                xanchor="center",
+                yanchor="bottom",
+                bgcolor="rgba(255,255,255,0.7)",
+                bordercolor="black",
+                borderwidth=0.5,
+                borderpad=2
+            )
+        elif row["Tipo"] == "PAUSA" and row["Minuti"] > 0:
+            # Per le pause, mostriamo solo ora fine se sono significative
+            fig.add_annotation(
+                x=row["Data"],
+                y=row["Start_Ore"] + row["Durata_Ore_Visibile"],
+                text=f"fine {row['Ora_Fine_Formattata']}",
+                showarrow=False,
+                font=dict(size=8, color="black", family='Arial'),
+                align="center",
+                xanchor="center",
+                yanchor="bottom",
+                bgcolor="rgba(255,255,255,0.7)",
+                bordercolor="black",
+                borderwidth=0.5,
+                borderpad=1
+            )
 
     # Aggiungiamo linee verticali tratteggiate tra i giorni
     if len(giorni_unici) > 1:
         for giorno in giorni_unici[1:]:
             fig.add_vline(
-                x=giorno - timedelta(hours=12),  # Mezzanotte
+                x=giorno - timedelta(hours=12),
                 line_width=1,
                 line_dash="dash",
                 line_color="gray",
