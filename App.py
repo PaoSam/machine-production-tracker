@@ -39,7 +39,7 @@ c4, c5 = st.columns(2)
 n_pezzi = c4.number_input("Numero pezzi", value=100)
 tempo_pezzo = c5.number_input("Tempo pezzo (minuti)", value=15)
 
-# ---------------- CALCOLO ESATTO (con log anche delle PAUSE) ----------------
+# ---------------- CALCOLO ESATTO (con Start e End reali) ----------------
 def calcola():
     minuti_piazzamento = piazzamento_ore * 60
     pezzi_restanti = n_pezzi
@@ -95,7 +95,7 @@ def calcola():
             corrente = corrente.replace(hour=6, minute=0, second=0, microsecond=0)
             continue
 
-        # Dentro una pausa? → ORA LA REGISTRIAMO NEL LOG
+        # Dentro una pausa? → la registriamo con orario reale
         in_pausa = False
         pausa_end = None
         for p1, p2 in pause:
@@ -104,12 +104,13 @@ def calcola():
                 pausa_end = p2
                 break
         if in_pausa:
+            start = corrente
             pausa_end_dt = datetime.combine(corrente.date(), pausa_end)
             pausa_min = (pausa_end_dt - corrente).total_seconds() / 60.0
-            
             log.append({
                 "Data": corrente.date(),
-                "Ora": corrente.strftime("%H:%M:%S"),
+                "Start": start,
+                "End": pausa_end_dt,
                 "Tipo": "PAUSA",
                 "Minuti": pausa_min,
                 "Pezzi": 0
@@ -135,16 +136,19 @@ def calcola():
 
         # Piazzamento
         if minuti_piazzamento > 0:
+            start = corrente
             work = min(minuti_piazzamento, delta_min)
+            end = corrente + timedelta(minutes=work)
             log.append({
                 "Data": corrente.date(),
-                "Ora": corrente.strftime("%H:%M:%S"),
+                "Start": start,
+                "End": end,
                 "Tipo": "PIAZZAMENTO",
                 "Minuti": work,
                 "Pezzi": 0
             })
             minuti_piazzamento -= work
-            corrente += timedelta(minutes=work)
+            corrente = end
             continue
 
         # Produzione
@@ -171,14 +175,17 @@ def calcola():
 
         tempo_residuo_pezzo = curr_res
 
+        start = corrente
+        end = corrente + timedelta(minutes=work)
         log.append({
             "Data": corrente.date(),
-            "Ora": corrente.strftime("%H:%M:%S"),
+            "Start": start,
+            "End": end,
             "Tipo": "PRODUZIONE",
             "Minuti": work,
             "Pezzi": pezzi_this
         })
-        corrente += timedelta(minutes=work)
+        corrente = end
 
     df = pd.DataFrame(log)
     return df, corrente
@@ -209,25 +216,28 @@ if st.button("CALCOLA PLANNING"):
         f"🏁 Fine lavorazione prevista: {fine_prevista.date()} ore {fine_prevista.strftime('%H:%M:%S')}"
     )
 
-    # ==================== NUOVO GRAFICO RICHIESTO ====================
-    st.subheader("📊 Orari Giornalieri (Pausa • Piazzamento • Lavoro effettivo)")
+    # ==================== TIMELINE ORARI REALI (come fai tu) ====================
+    st.subheader("📊 Orari Reali Turno - Inizio e Fine di ogni attività")
 
-    breakdown = df.groupby(["Data", "Tipo"]).agg(Minuti=("Minuti", "sum")).reset_index()
-    breakdown["Ore"] = breakdown["Minuti"] / 60
-
-    fig = px.bar(
-        breakdown,
-        x="Data",
-        y="Ore",
+    fig = px.timeline(
+        df,
+        x_start="Start",
+        x_end="End",
+        y="Data",
         color="Tipo",
-        title="Breakdown giornaliero degli orari",
-        labels={"Ore": "Ore totali"},
-        barmode="stack",           # barre impilate (totale = tempo turno)
+        title="Timeline giornaliera: orari esatti di Pausa • Piazzamento • Produzione",
         color_discrete_map={
             "PAUSA": "#FF4B4B",
             "PIAZZAMENTO": "#FFA500",
             "PRODUZIONE": "#00CC96"
-        }
+        },
+        hover_data=["Minuti", "Pezzi"]
     )
-    fig.update_layout(barmode="stack", yaxis_title="Ore")
+    fig.update_layout(
+        xaxis_title="Orario reale (Inizio → Fine)",
+        yaxis_title="Data",
+        height=600
+    )
+    fig.update_xaxes(tickformat="%d/%m %H:%M")
+
     st.plotly_chart(fig, use_container_width=True)
