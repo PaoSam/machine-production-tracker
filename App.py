@@ -204,8 +204,8 @@ if st.button("CALCOLA PLANNING"):
         f"🏁 Fine lavorazione prevista: {fine_prevista.date()} ore {fine_prevista.strftime('%H:%M:%S')}"
     )
 
-    # ==================== GRAFICO RICHIESTO: DATA sull'asse X - ORARIO sull'asse Y ====================
-    st.subheader("📊 Orari Reali Turno (Data sull'X • Orario sulla Y)")
+    # ==================== GRAFICO: DATA X • ORARIO Y (6:00 IN ALTO) ====================
+    st.subheader("📊 Orari Reali Turno (Data sull'X • Orario sulla Y – 6:00 in alto)")
 
     chart_df = df.copy()
     chart_df["Start_Ore"] = (
@@ -236,16 +236,17 @@ if st.button("CALCOLA PLANNING"):
     )
 
     fig.update_layout(
-        barmode="overlay",           # barre allineate sullo stesso giorno (non affiancate)
+        barmode="overlay",
         xaxis_title="Data",
         yaxis_title="Orario della giornata",
         height=650,
         legend_title="Tipo attività"
     )
 
-    # Scala Y perfetta (06:00 → 22:00) con etichette HH:00
+    # SCALA Y: 6:00 IN ALTO e orario che scende verso il basso
     fig.update_yaxes(
         range=[5.5, 22.5],
+        autorange="reversed",          # ← questo fa partire la scala da 6:00 IN ALTO
         tickmode="array",
         tickvals=list(range(6, 23)),
         ticktext=[f"{h:02d}:00" for h in range(6, 23)],
