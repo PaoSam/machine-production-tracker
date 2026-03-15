@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta, time
 
@@ -54,13 +55,16 @@ def converti_piazzamento(valore_input):
              "2.15" -> 2.25 ore (2 ore e 15 minuti)
     """
     try:
+        # Sostituisci eventuale virgola con punto
         valore_input = str(valore_input).replace(',', '.')
         
         if '.' in valore_input:
             ore, minuti = map(float, valore_input.split('.'))
+            # Converti i minuti in frazione di ora (es. 30 minuti = 0.5 ore)
             ore_decimali = ore + (minuti / 60)
             return ore_decimali
         else:
+            # Se non c'è il punto, è solo ore
             return float(valore_input)
     except:
         st.error("Formato piazzamento non valido. Usa ore.minuti (es. 1.30)")
@@ -247,91 +251,55 @@ if st.button("CALCOLA PLANNING"):
         f"🏁 Fine lavorazione prevista: {fine_prevista.date()} ore {fine_prevista.strftime('%H:%M:%S')}"
     )
 
-    # ==================== GRAFICO CON AREE RETTANGOLARI PIENE ====================
-    st.subheader("📊 Orari Reali Turno (Aree rettangolari per attività)")
+    # ==================== GRAFICO CON BARRE PIENE ====================
+    st.subheader("📊 Orari Reali Turno - Aree piene per attività")
 
     chart_df = df.copy()
     
-    # Convertiamo gli orari in ore decimali per il posizionamento
+    # Convertiamo gli orari in ore decimali
     chart_df["Start_Ore"] = (
         chart_df["Start"].dt.hour +
         chart_df["Start"].dt.minute / 60.0 +
         chart_df["Start"].dt.second / 3600.0
     )
-    chart_df["End_Ore"] = (
-        chart_df["End"].dt.hour +
-        chart_df["End"].dt.minute / 60.0 +
-        chart_df["End"].dt.second / 3600.0
+    chart_df["Durata_Ore"] = chart_df["Minuti"] / 60.0
+    
+    # Per il piazzamento, assicuriamoci che sia visibile anche se breve
+    chart_df["Durata_Ore_Visibile"] = chart_df.apply(
+        lambda row: max(row["Durata_Ore"], 0.1) if row["Tipo"] == "PIAZZAMENTO" and row["Durata_Ore"] < 0.1 else row["Durata_Ore"],
+        axis=1
     )
     
-    # Gestione casi in cui l'ora di fine è minore dell'ora di inizio (oltre mezzanotte)
-    chart_df.loc[chart_df["End_Ore"] < chart_df["Start_Ore"], "End_Ore"] += 24
-    
+    # Aggiungiamo il giorno della settimana
     chart_df["Giorno_Settimana"] = chart_df["Data"].apply(nome_giorno_italiano)
-    chart_df["Data_Formattata"] = chart_df["Data"].dt.strftime("%d/%m/%Y")
-
-    # Creiamo il grafico con plotly.graph_objects
-    fig = go.Figure()
-
-    # Colori per i diversi tipi di attività
-    colori = {
-        "PAUSA": "rgba(255, 75, 75, 0.9)",        # Rosso
-        "PIAZZAMENTO": "rgba(255, 165, 0, 0.9)",   # Arancione
-        "PRODUZIONE": "rgba(0, 204, 150, 0.9)"     # Verde
-    }
-
-    # Per ogni attività, creiamo un rettangolo
-    for idx, row in chart_df.iterrows():
-        # Calcoliamo la posizione del rettangolo
-        x0 = row["Data"]
-        x1 = row["Data"] + timedelta(days=0.5)  # Larghezza del rettangolo (mezza giornata)
-        y0 = row["Start_Ore"]
-        y1 = row["End_Ore"]
-        
-        # Aggiungiamo il rettangolo
-        fig.add_shape(
-            type="rect",
-            x0=x0,
-            y0=y0,
-            x1=x1,
-            y1=y1,
-            line=dict(
-                color="black",
-                width=1
-            ),
-            fillcolor=colori[row["Tipo"]],
-            opacity=0.8,
-            layer="above",
-            name=row["Tipo"],
-            showlegend=False
-        )
-        
-        # Aggiungiamo un punto invisibile per la legenda (unico per tipo)
-        if row["Tipo"] not in [trace.name for trace in fig.data if hasattr(trace, 'name')]:
-            fig.add_trace(go.Scatter(
-                x=[None],
-                y=[None],
-                mode='markers',
-                marker=dict(size=10, color=colori[row["Tipo"]]),
-                name=row["Tipo"],
-                showlegend=True
-            ))
-
-    # Aggiungiamo anche le etichette con i dettagli
-    fig.add_trace(go.Scatter(
-        x=chart_df["Data"] + timedelta(hours=6),  # Leggermente spostato per non sovrapporsi
-        y=(chart_df["Start_Ore"] + chart_df["End_Ore"])/2,
-        mode="text",
-        text=chart_df.apply(lambda row: f"{row['Pezzi']} pz" if row['Pezzi'] > 0 else "", axis=1),
-        textposition="middle center",
-        textfont=dict(size=10, color="black"),
-        showlegend=False,
-        hoverinfo="none"
-    ))
+    
+    # Creiamo il grafico con barre
+    fig = px.bar(
+        chart_df,
+        x="Data",
+        y="Durata_Ore_Visibile",
+        base="Start_Ore",
+        color="Tipo",
+        title="Orari di Pausa • Piazzamento • Produzione",
+        color_discrete_map={
+            "PAUSA": "#FF4B4B",
+            "PIAZZAMENTO": "#FFA500",
+            "PRODUZIONE": "#00CC96"
+        },
+        hover_data={
+            "Start": "|%H:%M:%S",
+            "End": "|%H:%M:%S",
+            "Minuti": True,
+            "Pezzi": True,
+            "Giorno_Settimana": True,
+            "Durata_Ore": True
+        },
+        text=chart_df.apply(lambda row: f"{row['Pezzi']} pz" if row['Pezzi'] > 0 else "", axis=1)
+    )
 
     # Configurazione del layout
     fig.update_layout(
-        title="Orari di Pausa • Piazzamento • Produzione",
+        barmode="overlay",
         xaxis_title="Data",
         yaxis_title="Orario della giornata",
         height=700,
@@ -349,7 +317,9 @@ if st.button("CALCOLA PLANNING"):
             borderwidth=1
         ),
         margin=dict(l=60, r=30, t=80, b=100),
-        hovermode="x unified"
+        hovermode="x unified",
+        bargap=0.1,  # Spazio tra le barre di giorni diversi
+        bargroupgap=0  # Nessuno spazio tra barre dello stesso giorno
     )
 
     # Configurazione asse X con giorni della settimana
@@ -359,7 +329,7 @@ if st.button("CALCOLA PLANNING"):
         tickvals=giorni_unici,
         ticktext=[f"{d.strftime('%d/%m')}<br>({nome_giorno_italiano(d)})" for d in giorni_unici],
         tickangle=0,
-        tickfont=dict(size=11),
+        tickfont=dict(size=11, family='Arial'),
         showgrid=True,
         gridcolor='lightgray',
         gridwidth=1,
@@ -367,13 +337,12 @@ if st.button("CALCOLA PLANNING"):
         showline=True,
         linewidth=1,
         linecolor='black',
-        mirror=True,
-        range=[giorni_unici[0] - timedelta(days=0.3), giorni_unici[-1] + timedelta(days=0.3)]
+        mirror=True
     )
 
     # Configurazione asse Y con scala invertita (6:00 in alto)
     fig.update_yaxes(
-        range=[22, 5],  # Invertito per avere 6:00 in alto
+        range=[22.5, 5.5],  # Invertito per avere 6:00 in alto
         tickmode="linear",
         tick0=6,
         dtick=1,
@@ -391,28 +360,26 @@ if st.button("CALCOLA PLANNING"):
         title_font=dict(size=12)
     )
 
-    # Aggiungiamo linee verticali per separare i giorni
+    # Personalizzazione delle barre
+    fig.update_traces(
+        marker_line_width=1,
+        marker_line_color="black",
+        opacity=0.9,
+        textposition="middle center",
+        textfont=dict(size=10, color="black", family='Arial')
+    )
+
+    # Aggiungiamo linee verticali tratteggiate tra i giorni
     if len(giorni_unici) > 1:
         for giorno in giorni_unici[1:]:
             fig.add_vline(
-                x=giorno,
+                x=giorno - timedelta(hours=12),  # Mezzanotte
                 line_width=1,
                 line_dash="dash",
                 line_color="gray",
                 opacity=0.7,
                 layer="below"
             )
-
-    # Aggiungiamo linee orizzontali ogni ora
-    for ora in range(6, 23):
-        fig.add_hline(
-            y=ora,
-            line_width=1,
-            line_dash="dot",
-            line_color="lightgray",
-            opacity=0.5,
-            layer="below"
-        )
 
     st.plotly_chart(fig, use_container_width=True)
     
