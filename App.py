@@ -69,6 +69,11 @@ def converti_piazzamento(valore_input):
         st.error("Formato piazzamento non valido. Usa ore.minuti (es. 1.30)")
         return 0.0
 
+# ---------------- FUNZIONE PER OTTENERE IL NOME DEL GIORNO IN ITALIANO ----------------
+def nome_giorno_italiano(data):
+    giorni = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+    return giorni[data.weekday()]
+
 # ---------------- CALCOLO ESATTO (con Start e End reali) ----------------
 def calcola(piazzamento_ore_decimali):
     minuti_piazzamento = piazzamento_ore_decimali * 60
@@ -222,6 +227,9 @@ if st.button("CALCOLA PLANNING"):
     
     df, fine_prevista = calcola(piazzamento_ore)
 
+    # Assicuriamoci che la colonna Data sia datetime
+    df['Data'] = pd.to_datetime(df['Data'])
+
     produzione = df[df["Tipo"] != "PAUSA"].groupby("Data").agg(
         Minuti_lavorati=("Minuti", "sum"),
         Pezzi=("Pezzi", "sum")
@@ -254,8 +262,8 @@ if st.button("CALCOLA PLANNING"):
     chart_df["Durata_Ore"] = chart_df["Minuti"] / 60.0
     chart_df["Durata_Ore_Visibile"] = chart_df["Durata_Ore"].clip(lower=0.05)
     
-    # Aggiungiamo colonne per formattazione asse X
-    chart_df["Giorno_Settimana"] = chart_df["Data"].dt.day_name(locale='it_IT')
+    # Aggiungiamo colonne per formattazione asse X usando una funzione personalizzata
+    chart_df["Giorno_Settimana"] = chart_df["Data"].apply(nome_giorno_italiano)
     chart_df["Data_Formattata"] = chart_df["Data"].dt.strftime("%d/%m/%Y") + " - " + chart_df["Giorno_Settimana"]
 
     fig = px.bar(
@@ -278,7 +286,8 @@ if st.button("CALCOLA PLANNING"):
             "Durata_Ore": True,
             "Giorno_Settimana": True,
             "Data_Formattata": True
-        }
+        },
+        custom_data=["Start", "End", "Minuti", "Pezzi", "Durata_Ore", "Giorno_Settimana", "Data_Formattata"]
     )
 
     fig.update_layout(
@@ -299,7 +308,8 @@ if st.button("CALCOLA PLANNING"):
         tickfont=dict(size=10),  # Dimensione font
         showgrid=True,
         gridcolor='lightgray',
-        gridwidth=1
+        gridwidth=1,
+        rangeslider_visible=False  # Disabilita lo slider se non necessario
     )
 
     # Configurazione asse Y
@@ -327,22 +337,18 @@ if st.button("CALCOLA PLANNING"):
     with st.expander("📋 Dettaglio attività"):
         # Aggiungiamo il giorno della settimana alla tabella
         df_dettaglio = df.copy()
-        df_dettaglio["Giorno"] = df_dettaglio["Data"].dt.day_name(locale='it_IT')
+        df_dettaglio["Giorno"] = df_dettaglio["Data"].apply(nome_giorno_italiano)
         df_dettaglio["Data_Completa"] = df_dettaglio["Data"].dt.strftime("%d/%m/%Y")
         
         st.dataframe(
-            df_dettaglio[["Data_Completa", "Giorno", "Tipo", "Start", "End", "Minuti", "Pezzi"]].style.format({
-                "Start": lambda x: x.strftime("%H:%M:%S"),
-                "End": lambda x: x.strftime("%H:%M:%S"),
-                "Minuti": "{:.1f}"
-            }),
+            df_dettaglio[["Data_Completa", "Giorno", "Tipo", "Start", "End", "Minuti", "Pezzi"]],
             use_container_width=True,
             column_config={
                 "Data_Completa": "Data",
                 "Giorno": "Giorno",
                 "Tipo": "Tipo",
-                "Start": "Inizio",
-                "End": "Fine",
+                "Start": st.column_config.DatetimeColumn("Inizio", format="HH:mm:ss"),
+                "End": st.column_config.DatetimeColumn("Fine", format="HH:mm:ss"),
                 "Minuti": "Durata (min)",
                 "Pezzi": "Pezzi"
             }
@@ -356,7 +362,7 @@ if st.button("CALCOLA PLANNING"):
             df_giorno = df[df["Data"] == giorno]
             ore_lavorate = df_giorno[df_giorno["Tipo"] != "PAUSA"]["Minuti"].sum() / 60
             pezzi_giorno = df_giorno[df_giorno["Tipo"] == "PRODUZIONE"]["Pezzi"].sum()
-            nome_giorno = giorno.strftime("%A").capitalize()
+            nome_giorno = nome_giorno_italiano(giorno)
             data_str = giorno.strftime("%d/%m/%Y")
             riepilogo_giorni.append({
                 "Data": data_str,
