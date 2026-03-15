@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime, timedelta, time
 
 # Festivi italiani
@@ -250,7 +251,7 @@ if st.button("CALCOLA PLANNING"):
         f"🏁 Fine lavorazione prevista: {fine_prevista.date()} ore {fine_prevista.strftime('%H:%M:%S')}"
     )
 
-    # ==================== GRAFICO CON ASSE X DETTAGLIATO ====================
+    # ==================== GRAFICO CON GRIGLIA RETTANGOLARE E GIORNI DELLA SETTIMANA ====================
     st.subheader("📊 Orari Reali Turno (Data sull'X • Orario sulla Y – 6:00 in alto)")
 
     chart_df = df.copy()
@@ -260,76 +261,120 @@ if st.button("CALCOLA PLANNING"):
         chart_df["Start"].dt.second / 3600.0
     )
     chart_df["Durata_Ore"] = chart_df["Minuti"] / 60.0
-    chart_df["Durata_Ore_Visibile"] = chart_df["Durata_Ore"].clip(lower=0.05)
     
-    # Aggiungiamo colonne per formattazione asse X usando una funzione personalizzata
-    chart_df["Giorno_Settimana"] = chart_df["Data"].apply(nome_giorno_italiano)
-    chart_df["Data_Formattata"] = chart_df["Data"].dt.strftime("%d/%m/%Y") + " - " + chart_df["Giorno_Settimana"]
-
-    fig = px.bar(
-        chart_df,
-        x="Data",
-        y="Durata_Ore_Visibile",
-        base="Start_Ore",
-        color="Tipo",
-        title="Orari esatti di Pausa • Piazzamento • Produzione",
-        color_discrete_map={
-            "PAUSA": "#FF4B4B",
-            "PIAZZAMENTO": "#FFA500",
-            "PRODUZIONE": "#00CC96"
-        },
-        hover_data={
-            "Start": "|%H:%M:%S",
-            "End": "|%H:%M:%S",
-            "Minuti": True,
-            "Pezzi": True,
-            "Durata_Ore": True,
-            "Giorno_Settimana": True,
-            "Data_Formattata": True
-        },
-        custom_data=["Start", "End", "Minuti", "Pezzi", "Durata_Ore", "Giorno_Settimana", "Data_Formattata"]
+    # Per il piazzamento, usiamo la durata reale ma aggiungiamo un marker per renderlo visibile
+    chart_df["Tipo_Visivo"] = chart_df["Tipo"]
+    chart_df["Durata_Ore_Visibile"] = chart_df.apply(
+        lambda row: max(row["Durata_Ore"], 0.1) if row["Tipo"] == "PIAZZAMENTO" and row["Durata_Ore"] < 0.1 else row["Durata_Ore"],
+        axis=1
     )
+    
+    # Aggiungiamo colonne per formattazione asse X
+    chart_df["Giorno_Settimana"] = chart_df["Data"].apply(nome_giorno_italiano)
+    chart_df["Data_Formattata"] = chart_df["Data"].dt.strftime("%d/%m/%Y")
+    chart_df["Etichetta_X"] = chart_df["Data_Formattata"] + "<br>(" + chart_df["Giorno_Settimana"] + ")"
 
+    # Creiamo il grafico con plotly.graph_objects per un controllo più preciso
+    fig = go.Figure()
+
+    # Aggiungiamo le barre per ogni tipo
+    for tipo, colore in [("PAUSA", "#FF4B4B"), ("PIAZZAMENTO", "#FFA500"), ("PRODUZIONE", "#00CC96")]:
+        df_tipo = chart_df[chart_df["Tipo"] == tipo]
+        if not df_tipo.empty:
+            fig.add_trace(go.Bar(
+                name=tipo,
+                x=df_tipo["Data"],
+                y=df_tipo["Durata_Ore_Visibile"],
+                base=df_tipo["Start_Ore"],
+                marker_color=colore,
+                marker_line_width=1,
+                marker_line_color="black",
+                opacity=0.9,
+                width=0.6,  # Larghezza delle barre
+                hovertemplate=
+                "<b>%{customdata[6]}</b><br>" +
+                "Orario: %{customdata[0]|%H:%M:%S} - %{customdata[1]|%H:%M:%S}<br>" +
+                "Durata: %{customdata[2]:.1f} minuti<br>" +
+                "Pezzi: %{customdata[3]}<br>" +
+                "<extra>%{fullData.name}</extra>",
+                customdata=df_tipo[["Start", "End", "Minuti", "Pezzi", "Durata_Ore", "Giorno_Settimana", "Etichetta_X"]]
+            ))
+
+    # Configurazione del layout per una griglia rettangolare perfetta
     fig.update_layout(
         barmode="overlay",
+        title="Orari esatti di Pausa • Piazzamento • Produzione",
         xaxis_title="Data",
         yaxis_title="Orario della giornata",
-        height=650,
+        height=700,
         legend_title="Tipo attività",
-        hovermode="x unified"
+        hovermode="x unified",
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(size=11),
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01,
+            bgcolor='rgba(255, 255, 255, 0.8)',
+            bordercolor='black',
+            borderwidth=1
+        ),
+        margin=dict(l=60, r=30, t=80, b=100)
     )
 
-    # Configurazione avanzata dell'asse X
+    # Configurazione asse X con giorni della settimana
     fig.update_xaxes(
-        tickformat="%d/%m/%Y",  # Formato data
-        tickangle=-45,  # Ruota le etichette di 45 gradi per leggibilità
-        tickmode="linear",  # Mostra tutti i tick
-        dtick="D1",  # Un tick al giorno
-        tickfont=dict(size=10),  # Dimensione font
+        tickformat="%d/%m/%Y",
+        tickangle=-45,
+        tickmode="array",
+        tickvals=chart_df["Data"].unique(),
+        ticktext=[f"{d.strftime('%d/%m')}<br>({nome_giorno_italiano(d)})" for d in sorted(chart_df["Data"].unique())],
+        tickfont=dict(size=10),
         showgrid=True,
         gridcolor='lightgray',
         gridwidth=1,
-        rangeslider_visible=False  # Disabilita lo slider se non necessario
+        griddash='solid',
+        showline=True,
+        linewidth=1,
+        linecolor='black',
+        mirror=True,
+        title_font=dict(size=12, family='Arial')
     )
 
-    # Configurazione asse Y
+    # Configurazione asse Y con griglia fitta e rettangolare
     fig.update_yaxes(
         range=[5.5, 22.5],
         autorange="reversed",
-        tickmode="array",
-        tickvals=list(range(6, 23)),
+        tickmode="linear",
+        tick0=6,
+        dtick=1,
         ticktext=[f"{h:02d}:00" for h in range(6, 23)],
-        title="Orario (HH:MM)",
+        tickvals=list(range(6, 23)),
+        tickfont=dict(size=10),
         showgrid=True,
         gridcolor='lightgray',
-        gridwidth=1
+        gridwidth=1,
+        griddash='solid',
+        showline=True,
+        linewidth=1,
+        linecolor='black',
+        mirror=True,
+        title_font=dict(size=12, family='Arial')
     )
-    
-    fig.update_traces(
-        marker_line_width=1,
-        marker_line_color="black",
-        opacity=0.8
-    )
+
+    # Aggiungiamo linee verticali per separare i giorni
+    giorni_unici = sorted(chart_df["Data"].unique())
+    if len(giorni_unici) > 1:
+        for giorno in giorni_unici[1:]:
+            fig.add_vline(
+                x=pd.Timestamp(giorno) - timedelta(hours=12),  # Mezzanotte
+                line_width=1,
+                line_dash="dash",
+                line_color="gray",
+                opacity=0.5
+            )
 
     st.plotly_chart(fig, use_container_width=True)
     
@@ -339,36 +384,67 @@ if st.button("CALCOLA PLANNING"):
         df_dettaglio = df.copy()
         df_dettaglio["Giorno"] = df_dettaglio["Data"].apply(nome_giorno_italiano)
         df_dettaglio["Data_Completa"] = df_dettaglio["Data"].dt.strftime("%d/%m/%Y")
+        df_dettaglio["Ora_Inizio"] = df_dettaglio["Start"].dt.strftime("%H:%M:%S")
+        df_dettaglio["Ora_Fine"] = df_dettaglio["End"].dt.strftime("%H:%M:%S")
         
         st.dataframe(
-            df_dettaglio[["Data_Completa", "Giorno", "Tipo", "Start", "End", "Minuti", "Pezzi"]],
+            df_dettaglio[["Data_Completa", "Giorno", "Tipo", "Ora_Inizio", "Ora_Fine", "Minuti", "Pezzi"]],
             use_container_width=True,
             column_config={
                 "Data_Completa": "Data",
                 "Giorno": "Giorno",
                 "Tipo": "Tipo",
-                "Start": st.column_config.DatetimeColumn("Inizio", format="HH:mm:ss"),
-                "End": st.column_config.DatetimeColumn("Fine", format="HH:mm:ss"),
-                "Minuti": "Durata (min)",
+                "Ora_Inizio": "Inizio",
+                "Ora_Fine": "Fine",
+                "Minuti": st.column_config.NumberColumn("Durata (min)", format="%.1f"),
                 "Pezzi": "Pezzi"
-            }
+            },
+            hide_index=True
         )
     
     # Riepilogo giorni lavorati
     with st.expander("📅 Riepilogo giorni"):
-        giorni_unici = df["Data"].unique()
+        giorni_unici = sorted(df["Data"].unique())
         riepilogo_giorni = []
-        for giorno in sorted(giorni_unici):
+        totale_ore = 0
+        totale_pezzi = 0
+        
+        for giorno in giorni_unici:
             df_giorno = df[df["Data"] == giorno]
             ore_lavorate = df_giorno[df_giorno["Tipo"] != "PAUSA"]["Minuti"].sum() / 60
             pezzi_giorno = df_giorno[df_giorno["Tipo"] == "PRODUZIONE"]["Pezzi"].sum()
             nome_giorno = nome_giorno_italiano(giorno)
             data_str = giorno.strftime("%d/%m/%Y")
+            
             riepilogo_giorni.append({
                 "Data": data_str,
                 "Giorno": nome_giorno,
-                "Ore lavorate": f"{ore_lavorate:.2f}",
+                "Ore lavorate": ore_lavorate,
                 "Pezzi prodotti": pezzi_giorno
             })
+            
+            totale_ore += ore_lavorate
+            totale_pezzi += pezzi_giorno
         
-        st.dataframe(pd.DataFrame(riepilogo_giorni), use_container_width=True)
+        df_riepilogo = pd.DataFrame(riepilogo_giorni)
+        
+        # Aggiungiamo riga totale
+        totale_row = pd.DataFrame({
+            "Data": ["TOTALE"],
+            "Giorno": [""],
+            "Ore lavorate": [totale_ore],
+            "Pezzi prodotti": [totale_pezzi]
+        })
+        df_riepilogo = pd.concat([df_riepilogo, totale_row], ignore_index=True)
+        
+        st.dataframe(
+            df_riepilogo,
+            use_container_width=True,
+            column_config={
+                "Data": "Data",
+                "Giorno": "Giorno",
+                "Ore lavorate": st.column_config.NumberColumn("Ore lavorate", format="%.2f"),
+                "Pezzi prodotti": "Pezzi prodotti"
+            },
+            hide_index=True
+        )
