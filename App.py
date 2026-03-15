@@ -51,7 +51,6 @@ def calcola():
     while minuti_piazzamento > 0 or pezzi_restanti > 0:
         wd = corrente.weekday()
 
-        # Festivi / Domenica
         if wd == 6 or corrente.date() in it_holidays:
             corrente += timedelta(days=1)
             corrente = corrente.replace(hour=6, minute=0, second=0, microsecond=0)
@@ -62,8 +61,7 @@ def calcola():
         if (settimana_corrente - settimana_iniziale) % 2 != 0:
             turno = "Pomeriggio" if turno_iniziale == "Mattina" else "Mattina"
 
-        # Definizione turno e pause
-        if wd == 5:  # Sabato
+        if wd == 5:
             if not lavora_sabato:
                 corrente += timedelta(days=1)
                 corrente = corrente.replace(hour=6, minute=0, second=0, microsecond=0)
@@ -75,10 +73,7 @@ def calcola():
             if tipo_lavoro == "Due Turni (Continuo)":
                 inizio = time(6, 0)
                 fine = time(21, 40)
-                pause = [
-                    (time(12, 0), time(12, 20)),
-                    (time(19, 30), time(19, 50))
-                ]
+                pause = [(time(12, 0), time(12, 20)), (time(19, 30), time(19, 50))]
             else:
                 if turno == "Mattina":
                     inizio = time(6, 0)
@@ -89,13 +84,11 @@ def calcola():
                     fine = time(21, 40)
                     pause = [(time(19, 30), time(19, 50))]
 
-        # Fuori orario di lavoro?
         if corrente.time() >= fine:
             corrente += timedelta(days=1)
             corrente = corrente.replace(hour=6, minute=0, second=0, microsecond=0)
             continue
 
-        # Dentro una pausa? → la registriamo con orario reale
         in_pausa = False
         pausa_end = None
         for p1, p2 in pause:
@@ -118,12 +111,10 @@ def calcola():
             corrente = pausa_end_dt
             continue
 
-        # Prima dell'inizio turno?
         if corrente.time() < inizio:
             corrente = datetime.combine(corrente.date(), inizio)
             continue
 
-        # Calcolo tempo disponibile fino al prossimo evento
         next_event = datetime.combine(corrente.date(), fine)
         for p1, p2 in pause:
             if corrente.time() < p1:
@@ -134,7 +125,6 @@ def calcola():
 
         delta_min = (next_event - corrente).total_seconds() / 60.0
 
-        # Piazzamento
         if minuti_piazzamento > 0:
             start = corrente
             work = min(minuti_piazzamento, delta_min)
@@ -151,7 +141,6 @@ def calcola():
             corrente = end
             continue
 
-        # Produzione
         if pezzi_restanti <= 0:
             break
 
@@ -195,7 +184,6 @@ def calcola():
 if st.button("CALCOLA PLANNING"):
     df, fine_prevista = calcola()
 
-    # Tabella Produzione (solo tempo lavorativo effettivo)
     produzione = df[df["Tipo"] != "PAUSA"].groupby("Data").agg(
         Minuti_lavorati=("Minuti", "sum"),
         Pezzi=("Pezzi", "sum")
@@ -216,28 +204,52 @@ if st.button("CALCOLA PLANNING"):
         f"🏁 Fine lavorazione prevista: {fine_prevista.date()} ore {fine_prevista.strftime('%H:%M:%S')}"
     )
 
-    # ==================== TIMELINE ORARI REALI (come fai tu) ====================
-    st.subheader("📊 Orari Reali Turno - Inizio e Fine di ogni attività")
+    # ==================== GRAFICO RICHIESTO: DATA sull'asse X - ORARIO sull'asse Y ====================
+    st.subheader("📊 Orari Reali Turno (Data sull'X • Orario sulla Y)")
 
-    fig = px.timeline(
-        df,
-        x_start="Start",
-        x_end="End",
-        y="Data",
+    chart_df = df.copy()
+    chart_df["Start_Ore"] = (
+        chart_df["Start"].dt.hour +
+        chart_df["Start"].dt.minute / 60.0 +
+        chart_df["Start"].dt.second / 3600.0
+    )
+    chart_df["Durata_Ore"] = chart_df["Minuti"] / 60.0
+
+    fig = px.bar(
+        chart_df,
+        x="Data",
+        y="Durata_Ore",
+        base="Start_Ore",
         color="Tipo",
-        title="Timeline giornaliera: orari esatti di Pausa • Piazzamento • Produzione",
+        title="Orari esatti di Pausa • Piazzamento • Produzione",
         color_discrete_map={
             "PAUSA": "#FF4B4B",
             "PIAZZAMENTO": "#FFA500",
             "PRODUZIONE": "#00CC96"
         },
-        hover_data=["Minuti", "Pezzi"]
+        hover_data={
+            "Start": "|%H:%M:%S",
+            "End": "|%H:%M:%S",
+            "Minuti": True,
+            "Pezzi": True
+        }
     )
+
     fig.update_layout(
-        xaxis_title="Orario reale (Inizio → Fine)",
-        yaxis_title="Data",
-        height=600
+        barmode="overlay",           # barre allineate sullo stesso giorno (non affiancate)
+        xaxis_title="Data",
+        yaxis_title="Orario della giornata",
+        height=650,
+        legend_title="Tipo attività"
     )
-    fig.update_xaxes(tickformat="%d/%m %H:%M")
+
+    # Scala Y perfetta (06:00 → 22:00) con etichette HH:00
+    fig.update_yaxes(
+        range=[5.5, 22.5],
+        tickmode="array",
+        tickvals=list(range(6, 23)),
+        ticktext=[f"{h:02d}:00" for h in range(6, 23)],
+        title="Orario (HH:MM)"
+    )
 
     st.plotly_chart(fig, use_container_width=True)
