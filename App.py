@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime, timedelta, time
 
 # Festivi italiani
@@ -273,6 +272,9 @@ if st.button("CALCOLA PLANNING"):
     # Aggiungiamo il giorno della settimana
     chart_df["Giorno_Settimana"] = chart_df["Data"].apply(nome_giorno_italiano)
     
+    # Creiamo una colonna per le etichette
+    chart_df["Etichetta"] = chart_df.apply(lambda row: f"{int(row['Pezzi'])} pz" if row['Pezzi'] > 0 else "", axis=1)
+    
     # Creiamo il grafico con barre
     fig = px.bar(
         chart_df,
@@ -293,8 +295,7 @@ if st.button("CALCOLA PLANNING"):
             "Pezzi": True,
             "Giorno_Settimana": True,
             "Durata_Ore": True
-        },
-        text=chart_df.apply(lambda row: f"{row['Pezzi']} pz" if row['Pezzi'] > 0 else "", axis=1)
+        }
     )
 
     # Configurazione del layout
@@ -360,14 +361,25 @@ if st.button("CALCOLA PLANNING"):
         title_font=dict(size=12)
     )
 
-    # Personalizzazione delle barre
+    # Personalizzazione delle barre (senza text parameter che causa l'errore)
     fig.update_traces(
         marker_line_width=1,
         marker_line_color="black",
-        opacity=0.9,
-        textposition="middle center",
-        textfont=dict(size=10, color="black", family='Arial')
+        opacity=0.9
     )
+
+    # Aggiungiamo le etichette con i numeri dei pezzi separatamente
+    for idx, row in chart_df[chart_df["Pezzi"] > 0].iterrows():
+        fig.add_annotation(
+            x=row["Data"],
+            y=row["Start_Ore"] + row["Durata_Ore_Visibile"]/2,
+            text=f"{int(row['Pezzi'])} pz",
+            showarrow=False,
+            font=dict(size=10, color="black", family='Arial'),
+            align="center",
+            xanchor="center",
+            yanchor="middle"
+        )
 
     # Aggiungiamo linee verticali tratteggiate tra i giorni
     if len(giorni_unici) > 1:
