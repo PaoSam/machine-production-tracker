@@ -35,7 +35,6 @@ ora_inizio = c2.time_input(
     step=timedelta(minutes=5)
 )
 
-# MODIFICA: Input per piazzamento con formato ore.minuti
 piazzamento_input = c3.text_input(
     "Piazzamento (ore.minuti)", 
     value="1.30",
@@ -243,7 +242,7 @@ if st.button("CALCOLA PLANNING"):
         f"🏁 Fine lavorazione prevista: {fine_prevista.date()} ore {fine_prevista.strftime('%H:%M:%S')}"
     )
 
-    # ==================== GRAFICO ====================
+    # ==================== GRAFICO CON ASSE X DETTAGLIATO ====================
     st.subheader("📊 Orari Reali Turno (Data sull'X • Orario sulla Y – 6:00 in alto)")
 
     chart_df = df.copy()
@@ -254,6 +253,10 @@ if st.button("CALCOLA PLANNING"):
     )
     chart_df["Durata_Ore"] = chart_df["Minuti"] / 60.0
     chart_df["Durata_Ore_Visibile"] = chart_df["Durata_Ore"].clip(lower=0.05)
+    
+    # Aggiungiamo colonne per formattazione asse X
+    chart_df["Giorno_Settimana"] = chart_df["Data"].dt.day_name(locale='it_IT')
+    chart_df["Data_Formattata"] = chart_df["Data"].dt.strftime("%d/%m/%Y") + " - " + chart_df["Giorno_Settimana"]
 
     fig = px.bar(
         chart_df,
@@ -272,7 +275,9 @@ if st.button("CALCOLA PLANNING"):
             "End": "|%H:%M:%S",
             "Minuti": True,
             "Pezzi": True,
-            "Durata_Ore": True
+            "Durata_Ore": True,
+            "Giorno_Settimana": True,
+            "Data_Formattata": True
         }
     )
 
@@ -281,16 +286,33 @@ if st.button("CALCOLA PLANNING"):
         xaxis_title="Data",
         yaxis_title="Orario della giornata",
         height=650,
-        legend_title="Tipo attività"
+        legend_title="Tipo attività",
+        hovermode="x unified"
     )
 
+    # Configurazione avanzata dell'asse X
+    fig.update_xaxes(
+        tickformat="%d/%m/%Y",  # Formato data
+        tickangle=-45,  # Ruota le etichette di 45 gradi per leggibilità
+        tickmode="linear",  # Mostra tutti i tick
+        dtick="D1",  # Un tick al giorno
+        tickfont=dict(size=10),  # Dimensione font
+        showgrid=True,
+        gridcolor='lightgray',
+        gridwidth=1
+    )
+
+    # Configurazione asse Y
     fig.update_yaxes(
         range=[5.5, 22.5],
         autorange="reversed",
         tickmode="array",
         tickvals=list(range(6, 23)),
         ticktext=[f"{h:02d}:00" for h in range(6, 23)],
-        title="Orario (HH:MM)"
+        title="Orario (HH:MM)",
+        showgrid=True,
+        gridcolor='lightgray',
+        gridwidth=1
     )
     
     fig.update_traces(
@@ -301,12 +323,46 @@ if st.button("CALCOLA PLANNING"):
 
     st.plotly_chart(fig, use_container_width=True)
     
+    # Tabella dettagliata con formattazione migliorata
     with st.expander("📋 Dettaglio attività"):
+        # Aggiungiamo il giorno della settimana alla tabella
+        df_dettaglio = df.copy()
+        df_dettaglio["Giorno"] = df_dettaglio["Data"].dt.day_name(locale='it_IT')
+        df_dettaglio["Data_Completa"] = df_dettaglio["Data"].dt.strftime("%d/%m/%Y")
+        
         st.dataframe(
-            df[["Data", "Tipo", "Start", "End", "Minuti", "Pezzi"]].style.format({
+            df_dettaglio[["Data_Completa", "Giorno", "Tipo", "Start", "End", "Minuti", "Pezzi"]].style.format({
                 "Start": lambda x: x.strftime("%H:%M:%S"),
                 "End": lambda x: x.strftime("%H:%M:%S"),
                 "Minuti": "{:.1f}"
             }),
-            use_container_width=True
+            use_container_width=True,
+            column_config={
+                "Data_Completa": "Data",
+                "Giorno": "Giorno",
+                "Tipo": "Tipo",
+                "Start": "Inizio",
+                "End": "Fine",
+                "Minuti": "Durata (min)",
+                "Pezzi": "Pezzi"
+            }
         )
+    
+    # Riepilogo giorni lavorati
+    with st.expander("📅 Riepilogo giorni"):
+        giorni_unici = df["Data"].unique()
+        riepilogo_giorni = []
+        for giorno in sorted(giorni_unici):
+            df_giorno = df[df["Data"] == giorno]
+            ore_lavorate = df_giorno[df_giorno["Tipo"] != "PAUSA"]["Minuti"].sum() / 60
+            pezzi_giorno = df_giorno[df_giorno["Tipo"] == "PRODUZIONE"]["Pezzi"].sum()
+            nome_giorno = giorno.strftime("%A").capitalize()
+            data_str = giorno.strftime("%d/%m/%Y")
+            riepilogo_giorni.append({
+                "Data": data_str,
+                "Giorno": nome_giorno,
+                "Ore lavorate": f"{ore_lavorate:.2f}",
+                "Pezzi prodotti": pezzi_giorno
+            })
+        
+        st.dataframe(pd.DataFrame(riepilogo_giorni), use_container_width=True)
