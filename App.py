@@ -1,7 +1,4 @@
-File "/mount/src/machine-production-tracker/App.py", line 210
-      st.plotly_chart(fig,use_container_width=True)ora_inizio = c2.time_input("Ora inizio", value=time(8,0))
-                                                   ^
-SyntaxError: invalid syntaxdata_inizio = c1.date_input("Data inizio", datetime.now())
+
 ora_inizio = c2.time_input("Ora inizio", value=time(8,0))
 piazzamento_ore = c3.number_input("Piazzamento ore", value=1.0)
 
