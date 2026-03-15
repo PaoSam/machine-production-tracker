@@ -34,14 +34,45 @@ ora_inizio = c2.time_input(
     value=time(8, 0),
     step=timedelta(minutes=5)
 )
-piazzamento_ore = c3.number_input("Piazzamento ore", value=1.0)
+
+# MODIFICA: Input per piazzamento con formato ore.minuti
+piazzamento_input = c3.text_input(
+    "Piazzamento (ore.minuti)", 
+    value="1.30",
+    help="Inserisci nel formato ore.minuti (es. 1.30 per 1 ora e 30 minuti, 0.45 per 45 minuti)"
+)
+
 c4, c5 = st.columns(2)
 n_pezzi = c4.number_input("Numero pezzi", value=100)
 tempo_pezzo = c5.number_input("Tempo pezzo (minuti)", value=15)
 
+# ---------------- FUNZIONE CONVERSIONE PIAZZAMENTO ----------------
+def converti_piazzamento(valore_input):
+    """
+    Converte l'input nel formato ore.minuti in ore decimali
+    Esempio: "1.30" -> 1.5 ore (1 ora e 30 minuti)
+             "0.45" -> 0.75 ore (45 minuti)
+             "2.15" -> 2.25 ore (2 ore e 15 minuti)
+    """
+    try:
+        # Sostituisci eventuale virgola con punto
+        valore_input = str(valore_input).replace(',', '.')
+        
+        if '.' in valore_input:
+            ore, minuti = map(float, valore_input.split('.'))
+            # Converti i minuti in frazione di ora (es. 30 minuti = 0.5 ore)
+            ore_decimali = ore + (minuti / 60)
+            return ore_decimali
+        else:
+            # Se non c'è il punto, è solo ore
+            return float(valore_input)
+    except:
+        st.error("Formato piazzamento non valido. Usa ore.minuti (es. 1.30)")
+        return 0.0
+
 # ---------------- CALCOLO ESATTO (con Start e End reali) ----------------
-def calcola():
-    minuti_piazzamento = piazzamento_ore * 60
+def calcola(piazzamento_ore_decimali):
+    minuti_piazzamento = piazzamento_ore_decimali * 60
     pezzi_restanti = n_pezzi
     tempo_residuo_pezzo = tempo_pezzo
     corrente = datetime.combine(data_inizio, ora_inizio)
@@ -182,7 +213,15 @@ def calcola():
 
 # ---------------- ESECUZIONE ----------------
 if st.button("CALCOLA PLANNING"):
-    df, fine_prevista = calcola()
+    # Converti l'input del piazzamento
+    piazzamento_ore = converti_piazzamento(piazzamento_input)
+    
+    # Mostra il valore convertito per chiarezza
+    ore_int = int(piazzamento_ore)
+    minuti_restanti = int((piazzamento_ore - ore_int) * 60)
+    st.info(f"📝 Piazzamento convertito: {ore_int} ore e {minuti_restanti} minuti ({piazzamento_ore:.2f} ore decimali)")
+    
+    df, fine_prevista = calcola(piazzamento_ore)
 
     produzione = df[df["Tipo"] != "PAUSA"].groupby("Data").agg(
         Minuti_lavorati=("Minuti", "sum"),
@@ -204,7 +243,7 @@ if st.button("CALCOLA PLANNING"):
         f"🏁 Fine lavorazione prevista: {fine_prevista.date()} ore {fine_prevista.strftime('%H:%M:%S')}"
     )
 
-    # ==================== GRAFICO: DATA X • ORARIO Y (6:00 IN ALTO) ====================
+    # ==================== GRAFICO ====================
     st.subheader("📊 Orari Reali Turno (Data sull'X • Orario sulla Y – 6:00 in alto)")
 
     chart_df = df.copy()
@@ -214,14 +253,12 @@ if st.button("CALCOLA PLANNING"):
         chart_df["Start"].dt.second / 3600.0
     )
     chart_df["Durata_Ore"] = chart_df["Minuti"] / 60.0
-    
-    # Assicuriamo che anche le durate molto piccole siano visibili
-    chart_df["Durata_Ore_Visibile"] = chart_df["Durata_Ore"].clip(lower=0.05)  # Minimo 3 minuti visibili
+    chart_df["Durata_Ore_Visibile"] = chart_df["Durata_Ore"].clip(lower=0.05)
 
     fig = px.bar(
         chart_df,
         x="Data",
-        y="Durata_Ore_Visibile",  # Usiamo la durata modificata per la visualizzazione
+        y="Durata_Ore_Visibile",
         base="Start_Ore",
         color="Tipo",
         title="Orari esatti di Pausa • Piazzamento • Produzione",
@@ -235,9 +272,8 @@ if st.button("CALCOLA PLANNING"):
             "End": "|%H:%M:%S",
             "Minuti": True,
             "Pezzi": True,
-            "Durata_Ore": True  # Mostriamo la durata reale nell'hover
-        },
-        custom_data=["Start", "End", "Minuti", "Pezzi", "Durata_Ore"]
+            "Durata_Ore": True
+        }
     )
 
     fig.update_layout(
@@ -245,21 +281,18 @@ if st.button("CALCOLA PLANNING"):
         xaxis_title="Data",
         yaxis_title="Orario della giornata",
         height=650,
-        legend_title="Tipo attività",
-        hovermode="x unified"
+        legend_title="Tipo attività"
     )
 
-    # SCALA Y: 6:00 IN ALTO e orario che scende verso il basso
     fig.update_yaxes(
         range=[5.5, 22.5],
-        autorange="reversed",          # ← questo fa partire la scala da 6:00 IN ALTO
+        autorange="reversed",
         tickmode="array",
         tickvals=list(range(6, 23)),
         ticktext=[f"{h:02d}:00" for h in range(6, 23)],
         title="Orario (HH:MM)"
     )
     
-    # Aggiungiamo bordo alle barre per migliorare la visibilità
     fig.update_traces(
         marker_line_width=1,
         marker_line_color="black",
@@ -268,7 +301,6 @@ if st.button("CALCOLA PLANNING"):
 
     st.plotly_chart(fig, use_container_width=True)
     
-    # Opzionale: Mostriamo anche una tabella dettagliata delle attività
     with st.expander("📋 Dettaglio attività"):
         st.dataframe(
             df[["Data", "Tipo", "Start", "End", "Minuti", "Pezzi"]].style.format({
