@@ -214,11 +214,14 @@ if st.button("CALCOLA PLANNING"):
         chart_df["Start"].dt.second / 3600.0
     )
     chart_df["Durata_Ore"] = chart_df["Minuti"] / 60.0
+    
+    # Assicuriamo che anche le durate molto piccole siano visibili
+    chart_df["Durata_Ore_Visibile"] = chart_df["Durata_Ore"].clip(lower=0.05)  # Minimo 3 minuti visibili
 
     fig = px.bar(
         chart_df,
         x="Data",
-        y="Durata_Ore",
+        y="Durata_Ore_Visibile",  # Usiamo la durata modificata per la visualizzazione
         base="Start_Ore",
         color="Tipo",
         title="Orari esatti di Pausa • Piazzamento • Produzione",
@@ -231,8 +234,10 @@ if st.button("CALCOLA PLANNING"):
             "Start": "|%H:%M:%S",
             "End": "|%H:%M:%S",
             "Minuti": True,
-            "Pezzi": True
-        }
+            "Pezzi": True,
+            "Durata_Ore": True  # Mostriamo la durata reale nell'hover
+        },
+        custom_data=["Start", "End", "Minuti", "Pezzi", "Durata_Ore"]
     )
 
     fig.update_layout(
@@ -240,7 +245,8 @@ if st.button("CALCOLA PLANNING"):
         xaxis_title="Data",
         yaxis_title="Orario della giornata",
         height=650,
-        legend_title="Tipo attività"
+        legend_title="Tipo attività",
+        hovermode="x unified"
     )
 
     # SCALA Y: 6:00 IN ALTO e orario che scende verso il basso
@@ -252,5 +258,23 @@ if st.button("CALCOLA PLANNING"):
         ticktext=[f"{h:02d}:00" for h in range(6, 23)],
         title="Orario (HH:MM)"
     )
+    
+    # Aggiungiamo bordo alle barre per migliorare la visibilità
+    fig.update_traces(
+        marker_line_width=1,
+        marker_line_color="black",
+        opacity=0.8
+    )
 
     st.plotly_chart(fig, use_container_width=True)
+    
+    # Opzionale: Mostriamo anche una tabella dettagliata delle attività
+    with st.expander("📋 Dettaglio attività"):
+        st.dataframe(
+            df[["Data", "Tipo", "Start", "End", "Minuti", "Pezzi"]].style.format({
+                "Start": lambda x: x.strftime("%H:%M:%S"),
+                "End": lambda x: x.strftime("%H:%M:%S"),
+                "Minuti": "{:.1f}"
+            }),
+            use_container_width=True
+        )
