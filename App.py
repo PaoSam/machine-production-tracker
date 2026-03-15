@@ -29,7 +29,11 @@ tipo_lavoro = st.sidebar.radio(
 st.header("Dati lavorazione")
 c1, c2, c3 = st.columns(3)
 data_inizio = c1.date_input("Data inizio", datetime.now())
-ora_inizio = c2.time_input("Ora inizio", value=time(8, 0))
+ora_inizio = c2.time_input(
+    "Ora inizio", 
+    value=time(8, 0),
+    step=5                     # ← ora il selettore avanza di 5 minuti in 5
+)
 piazzamento_ore = c3.number_input("Piazzamento ore", value=1.0)
 c4, c5 = st.columns(2)
 n_pezzi = c4.number_input("Numero pezzi", value=100)
@@ -180,7 +184,7 @@ if st.button("CALCOLA PLANNING"):
         Pezzi=("Pezzi", "sum")
     ).reset_index()
     produzione["Totale pezzi"] = produzione["Pezzi"].cumsum()
-    produzione["Ore lavorate"] = produzione["Minuti_lavorati"] / 60   # ← senza arrotondamento
+    produzione["Ore lavorate"] = produzione["Minuti_lavorati"] / 60
 
     st.subheader("📋 Tabella Produzione")
     st.dataframe(
