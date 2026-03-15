@@ -32,7 +32,7 @@ data_inizio = c1.date_input("Data inizio", datetime.now())
 ora_inizio = c2.time_input(
     "Ora inizio", 
     value=time(8, 0),
-    step=5                     # ← ora il selettore avanza di 5 minuti in 5
+    step=timedelta(minutes=5)   # ← picker salta ogni 5 minuti (es. 08:00, 08:05, 08:10...)
 )
 piazzamento_ore = c3.number_input("Piazzamento ore", value=1.0)
 c4, c5 = st.columns(2)
