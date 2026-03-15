@@ -32,14 +32,14 @@ data_inizio = c1.date_input("Data inizio", datetime.now())
 ora_inizio = c2.time_input(
     "Ora inizio", 
     value=time(8, 0),
-    step=timedelta(minutes=5)   # ← picker salta ogni 5 minuti (es. 08:00, 08:05, 08:10...)
+    step=timedelta(minutes=5)
 )
 piazzamento_ore = c3.number_input("Piazzamento ore", value=1.0)
 c4, c5 = st.columns(2)
 n_pezzi = c4.number_input("Numero pezzi", value=100)
 tempo_pezzo = c5.number_input("Tempo pezzo (minuti)", value=15)
 
-# ---------------- CALCOLO ESATTO (senza arrotondamenti) ----------------
+# ---------------- CALCOLO ESATTO (con log anche delle PAUSE) ----------------
 def calcola():
     minuti_piazzamento = piazzamento_ore * 60
     pezzi_restanti = n_pezzi
@@ -95,7 +95,7 @@ def calcola():
             corrente = corrente.replace(hour=6, minute=0, second=0, microsecond=0)
             continue
 
-        # Dentro una pausa?
+        # Dentro una pausa? → ORA LA REGISTRIAMO NEL LOG
         in_pausa = False
         pausa_end = None
         for p1, p2 in pause:
@@ -105,7 +105,16 @@ def calcola():
                 break
         if in_pausa:
             pausa_end_dt = datetime.combine(corrente.date(), pausa_end)
-            corrente = max(corrente, pausa_end_dt)
+            pausa_min = (pausa_end_dt - corrente).total_seconds() / 60.0
+            
+            log.append({
+                "Data": corrente.date(),
+                "Ora": corrente.strftime("%H:%M:%S"),
+                "Tipo": "PAUSA",
+                "Minuti": pausa_min,
+                "Pezzi": 0
+            })
+            corrente = pausa_end_dt
             continue
 
         # Prima dell'inizio turno?
@@ -113,7 +122,7 @@ def calcola():
             corrente = datetime.combine(corrente.date(), inizio)
             continue
 
-        # Calcolo tempo disponibile fino al prossimo evento (esatto!)
+        # Calcolo tempo disponibile fino al prossimo evento
         next_event = datetime.combine(corrente.date(), fine)
         for p1, p2 in pause:
             if corrente.time() < p1:
@@ -138,7 +147,7 @@ def calcola():
             corrente += timedelta(minutes=work)
             continue
 
-        # Produzione (esatta, gestisce più pezzi + frazionario)
+        # Produzione
         if pezzi_restanti <= 0:
             break
 
@@ -172,14 +181,15 @@ def calcola():
         corrente += timedelta(minutes=work)
 
     df = pd.DataFrame(log)
-    return df, corrente  # ritorna anche il tempo esatto di fine
+    return df, corrente
 
 
 # ---------------- ESECUZIONE ----------------
 if st.button("CALCOLA PLANNING"):
     df, fine_prevista = calcola()
 
-    produzione = df.groupby("Data").agg(
+    # Tabella Produzione (solo tempo lavorativo effettivo)
+    produzione = df[df["Tipo"] != "PAUSA"].groupby("Data").agg(
         Minuti_lavorati=("Minuti", "sum"),
         Pezzi=("Pezzi", "sum")
     ).reset_index()
@@ -199,10 +209,25 @@ if st.button("CALCOLA PLANNING"):
         f"🏁 Fine lavorazione prevista: {fine_prevista.date()} ore {fine_prevista.strftime('%H:%M:%S')}"
     )
 
+    # ==================== NUOVO GRAFICO RICHIESTO ====================
+    st.subheader("📊 Orari Giornalieri (Pausa • Piazzamento • Lavoro effettivo)")
+
+    breakdown = df.groupby(["Data", "Tipo"]).agg(Minuti=("Minuti", "sum")).reset_index()
+    breakdown["Ore"] = breakdown["Minuti"] / 60
+
     fig = px.bar(
-        produzione,
+        breakdown,
         x="Data",
-        y="Pezzi",
-        title="Produzione giornaliera"
+        y="Ore",
+        color="Tipo",
+        title="Breakdown giornaliero degli orari",
+        labels={"Ore": "Ore totali"},
+        barmode="stack",           # barre impilate (totale = tempo turno)
+        color_discrete_map={
+            "PAUSA": "#FF4B4B",
+            "PIAZZAMENTO": "#FFA500",
+            "PRODUZIONE": "#00CC96"
+        }
     )
+    fig.update_layout(barmode="stack", yaxis_title="Ore")
     st.plotly_chart(fig, use_container_width=True)
