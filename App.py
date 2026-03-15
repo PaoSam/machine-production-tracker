@@ -50,17 +50,19 @@ tempo_pezzo = c5.number_input("Tempo pezzo (minuti)", value=15)
 def calcola():
 
     minuti_piazzamento = piazzamento_ore * 60
-    minuti_produzione = n_pezzi * tempo_pezzo
+    pezzi_restanti = n_pezzi
 
     corrente = datetime.combine(data_inizio, ora_inizio)
 
     settimana_iniziale = data_inizio.isocalendar()[1]
 
+    tempo_residuo_pezzo = tempo_pezzo
+
     step = 5
 
     log = []
 
-    while minuti_piazzamento > 0 or minuti_produzione > 0:
+    while minuti_piazzamento > 0 or pezzi_restanti > 0:
 
         wd = corrente.weekday()
 
@@ -76,7 +78,7 @@ def calcola():
         if (settimana_corrente - settimana_iniziale) % 2 != 0:
             turno = "Pomeriggio" if turno_iniziale == "Mattina" else "Mattina"
 
-        # Sabato
+        # sabato
         if wd == 5:
 
             if not lavora_sabato:
@@ -114,7 +116,6 @@ def calcola():
                     fine = time(21,40)
                     pause = [(time(19,30),time(19,50))]
 
-        # fuori turno
         if corrente.time() < inizio:
             corrente = corrente.replace(hour=inizio.hour, minute=inizio.minute)
 
@@ -123,15 +124,14 @@ def calcola():
             corrente = corrente.replace(hour=6, minute=0)
             continue
 
-        # controllo pause
-        in_pausa = False
+        pausa = False
 
         for p1,p2 in pause:
             if p1 <= corrente.time() < p2:
-                in_pausa = True
+                pausa = True
                 break
 
-        if in_pausa:
+        if pausa:
             corrente += timedelta(minutes=step)
             continue
 
@@ -154,9 +154,16 @@ def calcola():
 
         else:
 
-            lavoro = min(step, minuti_produzione)
+            lavoro = min(step, tempo_residuo_pezzo)
 
-            pezzi = lavoro / tempo_pezzo
+            tempo_residuo_pezzo -= lavoro
+
+            pezzi = 0
+
+            if tempo_residuo_pezzo <= 0 and pezzi_restanti > 0:
+                pezzi = 1
+                pezzi_restanti -= 1
+                tempo_residuo_pezzo = tempo_pezzo
 
             log.append({
                 "Data":corrente.date(),
@@ -166,13 +173,11 @@ def calcola():
                 "Pezzi":pezzi
             })
 
-            minuti_produzione -= lavoro
-
             corrente += timedelta(minutes=lavoro)
 
     return pd.DataFrame(log)
 
-# ---------------- CALCOLO BUTTON ----------------
+# ---------------- CALCOLO ----------------
 
 if st.button("CALCOLA PLANNING"):
 
@@ -182,8 +187,6 @@ if st.button("CALCOLA PLANNING"):
         Minuti_lavorati=("Minuti","sum"),
         Pezzi=("Pezzi","sum")
     ).reset_index()
-
-    produzione["Pezzi"] = produzione["Pezzi"].round(0).astype(int)
 
     produzione["Totale pezzi"] = produzione["Pezzi"].cumsum()
 
